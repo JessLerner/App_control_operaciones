@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   X,
   History,
@@ -26,9 +26,19 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
   onSyncPending,
   isSyncing,
 }) => {
+  // Cerrar con Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  const pendingSales = sales.filter((s) => s.syncStatus === 'pending');
+  const pendingSales = sales.filter((s) => s.syncStatus !== 'synced');
 
   const exportToCSV = () => {
     if (sales.length === 0) return;
@@ -43,11 +53,14 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       'Seña o Completa',
       'Autorizó Descuento',
       'Valor Cuota #1',
+      'Cta. Fábrica',
       'Monto Cobrado',
+      'Sobrepauta',
       'Entrega Usado',
       'Modelo Usado',
       'Año Usado',
       'Valor Infoauto',
+      'Cotización Sugerida',
       'Valor Toma',
       'Equipo de Venta',
       'Vendedor',
@@ -65,11 +78,14 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       `"${s.senaOCompleta}"`,
       `"${(s.autorizoDescuento || '').replace(/"/g, '""')}"`,
       s.valorCuota1 || 0,
+      s.ctaFabrica !== undefined ? s.ctaFabrica : (s.valorCuota1 || 0),
       s.montoCobrado || 0,
+      s.sobrepauta !== undefined ? s.sobrepauta : (s.montoCobrado || 0) - (s.ctaFabrica || s.valorCuota1 || 0),
       `"${s.entregaUsado}"`,
       `"${(s.modeloUsado || '').replace(/"/g, '""')}"`,
       s.anoUsado || '',
       s.valorInfoauto || '',
+      s.cotizacionSugerida || (s.valorInfoauto ? Math.round(Number(s.valorInfoauto) * 0.7) : ''),
       s.valorToma || '',
       `"${s.equipoVenta}"`,
       `"${s.vendedor}"`,
@@ -94,8 +110,18 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="h-full w-full max-w-md bg-slate-900 border-l border-slate-800 p-5 shadow-2xl flex flex-col text-slate-100 animate-in slide-from-right duration-300">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="h-full w-full max-w-md bg-slate-900 border-l border-slate-800 p-5 shadow-2xl flex flex-col text-slate-100 animate-in slide-from-right duration-300"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2">
@@ -123,9 +149,11 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
         <div className="mt-3 flex items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
           {pendingSales.length > 0 ? (
             <button
+              type="button"
               onClick={onSyncPending}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition active:scale-95"
+              id="btn-sincronizar-ventas"
+              className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition active:scale-95 disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`}
@@ -133,15 +161,21 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
               <span>Sincronizar {pendingSales.length} Pendiente(s)</span>
             </button>
           ) : (
-            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5" /> Todo sincronizado
-            </span>
+            <div
+              id="badge-estado-sincronizado"
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-400"
+            >
+              <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span>Todo sincronizado</span>
+            </div>
           )}
 
           {sales.length > 0 && (
             <button
+              type="button"
               onClick={exportToCSV}
-              className="flex items-center gap-1 rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition"
+              id="btn-exportar-csv"
+              className="flex items-center gap-1 rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition ml-auto"
             >
               <Download className="h-3.5 w-3.5" />
               <span>CSV</span>
@@ -193,16 +227,25 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
                   {sale.autorizoDescuento ? ` - Aut: ${sale.autorizoDescuento}` : ''})
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[11px] text-slate-400">
-                  <span>Cuota 1: <strong className="text-slate-200">{formatCurrency(sale.valorCuota1)}</strong></span>
-                  <span className="font-mono font-bold text-emerald-400 text-xs">
-                    Cobrado: {formatCurrency(sale.montoCobrado)}
-                  </span>
+                <div className="pt-1 border-t border-slate-800/80 space-y-1 text-[11px] text-slate-400">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      Cuota 1: <strong className="text-slate-200">{formatCurrency(sale.valorCuota1)}</strong>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400 text-xs">
+                      Cobrado: {formatCurrency(sale.montoCobrado)}
+                    </span>
+                  </div>
                 </div>
 
                 {sale.entregaUsado === 'Sí' && (
-                  <div className="text-[10px] text-amber-300/90 bg-amber-500/10 px-2 py-1 rounded">
-                    Usado: {sale.modeloUsado} ({sale.anoUsado}) &bull; Toma: {formatCurrency(sale.valorToma)}
+                  <div className="text-[10px] text-amber-300/90 bg-amber-500/10 px-2 py-1.5 rounded space-y-0.5">
+                    <div>
+                      Usado: <strong>{sale.modeloUsado}</strong> ({sale.anoUsado}) &bull; Toma: <strong>{formatCurrency(sale.valorToma)}</strong>
+                    </div>
+                    <div className="text-[9px] text-amber-400/70">
+                      Infoauto: {formatCurrency(sale.valorInfoauto || 0)} &bull; Cotiz. Sugerida (-30%): {formatCurrency(sale.cotizacionSugerida || Math.round(Number(sale.valorInfoauto || 0) * 0.7))}
+                    </div>
                   </div>
                 )}
 

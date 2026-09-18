@@ -271,24 +271,41 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
 
           {activeTab === 'script' && (
             <div className="space-y-3">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-white">
+                      Actualización Automática para 'Cta. Fábrica' y 'Sobrepauta':
+                    </p>
+                    <p className="text-[11px] text-emerald-200/90 leading-relaxed">
+                      Este código actualizado detecta y crea automáticamente las columnas <strong>Cta. Fábrica</strong> y <strong>Sobrepauta</strong> en tu pestaña <code>ID Ventas</code> si aún no existen, y busca la cotización oficial en <code>Modelos_y_Precios</code> de forma dinámica.
+                    </p>
+                    <p className="text-[11px] text-emerald-300 font-medium">
+                      👉 <strong>Cómo actualizar en 3 pasos:</strong> Copia el código abajo → En Google Sheets ve a <em>Extensiones &gt; Apps Script</em>, reemplaza el código y Guarda → Haz clic en <em>Implementar &gt; Administrar implementaciones &gt; Editar (ícono lápiz) &gt; Versión: Nueva versión &gt; Implementar</em>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-300">
-                  Copia este código y pégalo en tu editor de <strong>Extensiones &gt; Apps Script</strong> en Google Sheets:
+                  Código de <strong>Codigo.gs</strong> para Google Apps Script:
                 </p>
                 <button
                   type="button"
                   onClick={handleCopyScript}
-                  className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition"
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition active:scale-95 shadow"
                 >
                   {copiedScript ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">¡Copiado!</span>
+                      <Check className="h-3.5 w-3.5 text-white" />
+                      <span>¡Código Copiado!</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5" />
-                      <span>Copiar Código</span>
+                      <span>Copiar Código Completo</span>
                     </>
                   )}
                 </button>

@@ -64,7 +64,16 @@ export default function App() {
   // Calculate today's sales
   const todayStr = getTodayDateString();
   const todaySalesCount = salesHistory.filter((s) => s.fecha === todayStr).length;
-  const pendingCount = salesHistory.filter((s) => s.syncStatus === 'pending').length;
+  const pendingCount = salesHistory.filter((s) => s.syncStatus !== 'synced').length;
+
+  // Auto-verificar suscripciones pendientes al cargar si hay URL configurada
+  useEffect(() => {
+    if (config.webAppUrl && pendingCount > 0) {
+      syncPendingSales().then(() => {
+        setSalesHistory(getSalesHistory());
+      });
+    }
+  }, [config.webAppUrl]);
 
   const handleFormSubmit = async (formData: VentaFormData) => {
     setIsSubmitting(true);
@@ -113,7 +122,10 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Header */}
       <Header
-        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenHistory={() => {
+          setSalesHistory(getSalesHistory());
+          setIsHistoryOpen(true);
+        }}
         onOpenSettings={() => setIsSettingsOpen(true)}
         isCustomSheetsConnected={!!config.webAppUrl}
         pendingCount={pendingCount}

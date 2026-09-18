@@ -11,6 +11,7 @@ export interface ModeloPlanItem {
   modelo: string;
   tipoPlan: string; // ej: "100%", "80/20", "70/30"
   valorCuota1: number; // Valor sugerido
+  ctaFabrica?: number; // Cta. Fábrica oficial
 }
 
 export interface EquipoVenta {
@@ -51,11 +52,14 @@ export interface VentaFormData {
   senaOCompleta: SenaOCompleta;
   autorizoDescuento?: string; // Obligatorio si senaOCompleta === 'Descuento Aprobado'
   valorCuota1: number | ''; // 100% automático, solo lectura
+  ctaFabrica?: number | ''; // 100% automático de Modelos_y_Precios
+  sobrepauta?: number | ''; // Monto Cobrado - Cta. Fábrica
   montoCobrado: number | '';
   entregaUsado: EntregaUsado; // Default: 'Sí'
   modeloUsado?: string;
   anoUsado?: number | '';
   valorInfoauto?: number | '';
+  cotizacionSugerida?: number | ''; // Valor Infoauto * 0.70 (30% de descuento)
   valorToma?: number | '';
   equipoVenta: string;
   vendedor: string;

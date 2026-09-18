@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Lock,
   UserCheck,
+  Calculator,
 } from 'lucide-react';
 import {
   MarcaAuto,
@@ -57,6 +58,10 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   
   // Valor Cuota #1: 100% automático, solo lectura
   const [valorCuota1, setValorCuota1] = useState<number | ''>(initialValues?.valorCuota1 || '');
+  // Cta. Fábrica: 100% automático de Modelos_y_Precios (Solo lectura)
+  const [ctaFabrica, setCtaFabrica] = useState<number | ''>(
+    initialValues?.ctaFabrica !== undefined ? initialValues.ctaFabrica : ''
+  );
   const [montoCobrado, setMontoCobrado] = useState<number | ''>(initialValues?.montoCobrado || '');
   
   // Condición de Cobro: Completa, Seña o Descuento Aprobado
@@ -91,6 +96,28 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
 
+  // Sobrepauta = Monto Cobrado - Cta. Fábrica (Calculado automáticamente)
+  const sobrepauta = useMemo<number | ''>(() => {
+    if (typeof montoCobrado === 'number') {
+      const baseFabrica =
+        typeof ctaFabrica === 'number'
+          ? ctaFabrica
+          : typeof valorCuota1 === 'number'
+          ? valorCuota1
+          : 0;
+      return montoCobrado - baseFabrica;
+    }
+    return '';
+  }, [montoCobrado, ctaFabrica, valorCuota1]);
+
+  // Cotización Sugerida = Valor Infoauto * 0.70 (30% de descuento automático)
+  const cotizacionSugerida = useMemo<number | ''>(() => {
+    if (typeof valorInfoauto === 'number' && valorInfoauto > 0) {
+      return Math.round(valorInfoauto * 0.7);
+    }
+    return '';
+  }, [valorInfoauto]);
+
   // Validación de N° Suscripción duplicado en tiempo real (PRIMARY KEY)
   const isDuplicateSubscription = useMemo(() => {
     if (!numSuscripcion || !numSuscripcion.trim()) return false;
@@ -121,7 +148,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     return Array.from(planesSet);
   }, [marca, modelo, referenceData.modelosYPrecios]);
 
-  // 3. Autocompletado dinámico de 'Valor Cuota #1' (100% Automático de tabla, Solo Lectura)
+  // 3. Autocompletado dinámico de 'Valor Cuota #1' y 'Cta. Fábrica' (100% Automático de tabla, Solo Lectura)
   useEffect(() => {
     if (marca && modelo && tipoPlan) {
       const match = referenceData.modelosYPrecios.find(
@@ -130,13 +157,24 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
           item.modelo.toLowerCase() === modelo.toLowerCase() &&
           item.tipoPlan.toLowerCase() === tipoPlan.toLowerCase()
       );
-      if (match && match.valorCuota1 > 0) {
-        setValorCuota1(match.valorCuota1);
+      if (match) {
+        if (match.valorCuota1 > 0) {
+          setValorCuota1(match.valorCuota1);
+        } else {
+          setValorCuota1('');
+        }
+        const factoryCuota =
+          match.ctaFabrica !== undefined && match.ctaFabrica > 0
+            ? match.ctaFabrica
+            : match.valorCuota1;
+        setCtaFabrica(factoryCuota || '');
       } else {
         setValorCuota1('');
+        setCtaFabrica('');
       }
     } else {
       setValorCuota1('');
+      setCtaFabrica('');
     }
   }, [marca, modelo, tipoPlan, referenceData.modelosYPrecios]);
 
@@ -175,6 +213,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setModelo('');
     setTipoPlan('');
     setValorCuota1('');
+    setCtaFabrica('');
     markTouched('marca');
   };
 
@@ -184,6 +223,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setModelo(newModelo);
     setTipoPlan('');
     setValorCuota1('');
+    setCtaFabrica('');
     markTouched('modelo');
   };
 
@@ -289,6 +329,29 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
           : autorizoDescuento
         : '';
 
+    const finalMontoCobrado = typeof montoCobrado === 'number' ? montoCobrado : 0;
+    
+    // Resolución garantizada de Cta. Fábrica desde estado o referencia directa
+    let resolvedCtaFabrica = typeof ctaFabrica === 'number' && ctaFabrica > 0 ? ctaFabrica : 0;
+    if (!resolvedCtaFabrica && marca && modelo && tipoPlan) {
+      const match = referenceData.modelosYPrecios.find(
+        (item) =>
+          item.marca.toUpperCase() === marca.toUpperCase() &&
+          item.modelo.toLowerCase() === modelo.toLowerCase() &&
+          item.tipoPlan.toLowerCase() === tipoPlan.toLowerCase()
+      );
+      if (match) {
+        resolvedCtaFabrica = Number(match.ctaFabrica) || Number(match.valorCuota1) || 0;
+      }
+    }
+    if (!resolvedCtaFabrica) {
+      resolvedCtaFabrica = typeof valorCuota1 === 'number' ? valorCuota1 : 0;
+    }
+
+    // Sobrepauta = Monto Cobrado - Cta. Fábrica
+    const resolvedSobrepauta =
+      typeof sobrepauta === 'number' ? sobrepauta : finalMontoCobrado - resolvedCtaFabrica;
+
     const payload: VentaFormData = {
       fecha,
       cliente: cliente.trim(),
@@ -299,11 +362,14 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       senaOCompleta,
       autorizoDescuento: finalAutorizador,
       valorCuota1: typeof valorCuota1 === 'number' ? valorCuota1 : 0,
-      montoCobrado: typeof montoCobrado === 'number' ? montoCobrado : 0,
+      ctaFabrica: resolvedCtaFabrica,
+      sobrepauta: resolvedSobrepauta,
+      montoCobrado: finalMontoCobrado,
       entregaUsado,
       modeloUsado: entregaUsado === 'Sí' ? modeloUsado.trim() : '',
       anoUsado: entregaUsado === 'Sí' && typeof anoUsado === 'number' ? anoUsado : '',
       valorInfoauto: entregaUsado === 'Sí' && typeof valorInfoauto === 'number' ? valorInfoauto : '',
+      cotizacionSugerida: entregaUsado === 'Sí' && typeof cotizacionSugerida === 'number' ? cotizacionSugerida : '',
       valorToma: entregaUsado === 'Sí' && typeof valorToma === 'number' ? valorToma : '',
       equipoVenta,
       vendedor,
@@ -515,7 +581,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
         {/* Separador sutil */}
         <div className="my-4 border-t border-slate-800/80" />
 
-        {/* 8, 9, 7: Valores Financieros y Condición */}
+        {/* 8, 9, 7: Valores Financieros y Condición de Suscripción (Sin impacto visual de Cta. Fábrica / Sobrepauta) */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {/* 8. Valor Cuota #1 (100% Automático de catálogo - Solo Lectura) */}
           <div>
@@ -778,9 +844,9 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
               {/* 11. Modelo Usado */}
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-4">
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   11. Modelo Usado (Marca, Versión) *
                 </label>
@@ -796,7 +862,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
               </div>
 
               {/* 12. Año Usado */}
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   12. Año *
                 </label>
@@ -817,7 +883,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
               </div>
 
               {/* 13. Valor Infoauto */}
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   13. Valor Infoauto *
                 </label>
@@ -838,23 +904,65 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
                     required={entregaUsado === 'Sí'}
                   />
                 </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Tasación de lista Infoauto.
+                </p>
+              </div>
+
+              {/* NUEVO: Cotización Sugerida (Infoauto - 30%, Solo Lectura) */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-amber-300">
+                    <Calculator className="h-3.5 w-3.5 text-amber-400" />
+                    Cotización Sugerida (-30%)
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-700/50">
+                    <Lock className="h-2.5 w-2.5 text-amber-400" /> Infoauto &times; 0.70
+                  </span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">
+                    $
+                  </span>
+                  <input
+                    type="text"
+                    id="input-cotizacion-sugerida"
+                    value={formatNumberWithThousands(cotizacionSugerida)}
+                    readOnly
+                    disabled
+                    placeholder="Infoauto - 30%"
+                    className="w-full rounded-xl border border-amber-500/40 bg-slate-950/70 pl-7 pr-3 py-2.5 text-sm font-mono font-bold text-amber-300 cursor-not-allowed select-none"
+                  />
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>70% de Infoauto</span>
+                  {typeof cotizacionSugerida === 'number' && cotizacionSugerida > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setValorToma(cotizacionSugerida)}
+                      className="text-amber-400 hover:text-amber-300 underline font-medium text-[10px]"
+                    >
+                      Copiar a Valor Toma
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* 14. Valor Toma */}
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-                  <span>14. Valor de Toma Concesionario *</span>
+                  <span>14. Valor Toma Concesionario *</span>
                   {typeof valorInfoauto === 'number' &&
                     typeof valorToma === 'number' &&
                     valorInfoauto > 0 &&
                     valorToma > 0 && (
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-slate-300">
                         Dif: {formatCurrency(valorInfoauto - valorToma)}
                       </span>
                     )}
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400">
                     $
                   </span>
                   <input
@@ -866,10 +974,13 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
                       setValorToma(num > 0 ? num : '');
                     }}
                     placeholder="0"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-800 pl-7 pr-3 py-2.5 text-sm font-mono text-amber-300 placeholder-slate-500 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 transition"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 pl-7 pr-3 py-2.5 text-sm font-mono text-emerald-300 placeholder-slate-500 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 transition"
                     required={entregaUsado === 'Sí'}
                   />
                 </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Monto final acordado de toma.
+                </p>
               </div>
             </div>
           </div>
