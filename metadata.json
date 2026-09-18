@@ -1,0 +1,6 @@
+{
+  "name": "Parte Diario de Ventas",
+  "description": "PWA y Web App para el registro ágil y a prueba de errores de ventas diarias de planes de ahorro con sincronización a Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
