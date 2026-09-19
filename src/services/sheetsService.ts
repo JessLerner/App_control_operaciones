@@ -62,7 +62,13 @@ export async function managerRequest<T extends Record<string, unknown>>(
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
     });
-    const json = await response.json() as { status?: string; data?: T; message?: string };
+    const raw = await response.text();
+    let json: { status?: string; data?: T; message?: string };
+    try {
+      json = JSON.parse(raw) as { status?: string; data?: T; message?: string };
+    } catch {
+      return { success: false, error: 'Google Apps Script devolvió una respuesta no válida. Actualizá la página e intentá nuevamente.' };
+    }
     return json.status === 'success'
       ? { success: true, data: json.data }
       : { success: false, error: json.message || 'No se pudo completar la operación.' };
