@@ -5,7 +5,10 @@ import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
+  const isGitHubPages = process.env.GITHUB_ACTIONS === 'true';
+
   return {
+    base: isGitHubPages ? '/App_control_operaciones/' : '/',
     plugins: [
       react(),
       tailwindcss(),
@@ -20,8 +23,8 @@ export default defineConfig(() => {
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: isGitHubPages ? '/App_control_operaciones/' : '/',
+          scope: isGitHubPages ? '/App_control_operaciones/' : '/',
           icons: [
             {
               src: '/icon.svg',
