@@ -116,7 +116,7 @@ export default function App() {
       const remoteResult = result.syncedToRemote
         ? undefined
         : await fetchRemoteReferenceData(config.webAppUrl);
-      const syncedRecord = remoteResult.sales?.find(
+      const syncedRecord = remoteResult?.sales?.find(
         (sale) => sale.numSuscripcion.trim().toLowerCase() === formData.numSuscripcion.trim().toLowerCase()
       );
       const isSynced = syncedRecord?.syncStatus === 'synced' || result.syncedToRemote;
