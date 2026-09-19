@@ -15,7 +15,7 @@ const HEADERS = [
   'Seña o Completa', 'Valor Cuota #1', 'Monto Cobrado', 'Autorizó Descuento',
   'Cta. Fábrica', 'Sobrepauta', '¿Entrega Usado?', 'Modelo Usado', 'Año Usado',
   'Valor Infoauto', 'Cotización Sugerida', 'Valor Toma', 'Equipo de Venta',
-  'Vendedor', 'Origen del Dato', 'Timestamp'
+  'Vendedor', 'Origen del Dato'
 ];
 
 function jsonResponse(payload) {
@@ -156,7 +156,6 @@ function fieldForHeader(header) {
   if (value.indexOf('equipo') >= 0 || value.indexOf('supervisor') >= 0) return 'equipoVenta';
   if (value.indexOf('vendedor') >= 0) return 'vendedor';
   if (value.indexOf('origen') >= 0) return 'origenDato';
-  if (value.indexOf('timestamp') >= 0) return 'timestamp';
   return '';
 }
 
@@ -209,8 +208,7 @@ function doPost(e) {
     const payload = Object.assign({}, body, {
       numSuscripcion: numSuscripcion, ctaFabrica: cuotaFabrica,
       sobrepauta: numberValue(body.montoCobrado, 0) - cuotaFabrica,
-      cotizacionSugerida: body.entregaUsado === 'Sí' ? Math.round(infoauto * (1 - descuento)) : '',
-      timestamp: Date.now()
+      cotizacionSugerida: body.entregaUsado === 'Sí' ? Math.round(infoauto * (1 - descuento)) : ''
     });
     const row = destination.headers.map(function(header) {
       const field = fieldForHeader(header);

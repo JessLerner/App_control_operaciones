@@ -109,11 +109,22 @@ export default function App() {
     setIsSubmitting(true);
     try {
       const result = await submitVentaRecord(formData);
+      // Apps Script puede completar la escritura antes de que el navegador reciba
+      // la respuesta final. Releemos la fuente para reflejar el estado real.
+      const remoteResult = result.syncedToRemote
+        ? undefined
+        : await fetchRemoteReferenceData(config.webAppUrl);
+      const syncedRecord = remoteResult.sales?.find(
+        (sale) => sale.numSuscripcion.trim().toLowerCase() === formData.numSuscripcion.trim().toLowerCase()
+      );
+      const isSynced = syncedRecord?.syncStatus === 'synced' || result.syncedToRemote;
       setLastSubmittedSale({
         numSuscripcion: result.numSuscripcion,
         data: formData,
-        syncedToRemote: result.syncedToRemote,
-        message: result.message,
+        syncedToRemote: isSynced,
+        message: isSynced
+          ? 'Venta confirmada y guardada en Google Sheets.'
+          : result.message,
       });
 
       // Preserve supervisor & seller for next rapid entry
@@ -123,7 +134,7 @@ export default function App() {
       });
 
       // Update history in state
-      setSalesHistory(getSalesHistory());
+      setSalesHistory(remoteResult?.sales || getSalesHistory());
       setIsSuccessOpen(true);
     } catch (error) {
       console.error('Error al registrar venta:', error);
