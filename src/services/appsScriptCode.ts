@@ -172,7 +172,75 @@ function getVentas(destination) {
   }).filter(function(sale) { return String(sale.numSuscripcion || '').trim(); });
 }
 
-function doGet() {
+function hashSecret(value) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ''), Utilities.Charset.UTF_8);
+  return bytes.map(function(byte) { const value = (byte + 256) % 256; return ('0' + value.toString(16)).slice(-2); }).join('');
+}
+
+function sessionKey(token) { return 'manager_session_' + hashSecret(token); }
+
+function managerSession(token) {
+  if (!token) return false;
+  const raw = PropertiesService.getScriptProperties().getProperty(sessionKey(token));
+  if (!raw) return false;
+  try { return JSON.parse(raw).expiresAt > Date.now(); } catch (_) { return false; }
+}
+
+function requireManager(body) {
+  if (!managerSession(body.token)) throw new Error('La sesión de Gerencia venció. Ingresá nuevamente.');
+}
+
+function handleManagerAction(ss, body) {
+  const properties = PropertiesService.getScriptProperties();
+  const action = String(body.action || '');
+  if (action === 'managerSetup') {
+    if (properties.getProperty('manager_pin_hash')) throw new Error('Gerencia ya fue configurada.');
+    if (!body.pin || String(body.pin).length < 8 || !body.recoveryEmail) throw new Error('Indicá una clave de al menos 8 caracteres y un correo de recuperación.');
+    properties.setProperty('manager_pin_hash', hashSecret(body.pin));
+    properties.setProperty('manager_recovery_email', String(body.recoveryEmail).trim());
+    return { configured: 'true' };
+  }
+  if (action === 'managerLogin') {
+    if (!properties.getProperty('manager_pin_hash')) return { setupRequired: 'true' };
+    if (hashSecret(body.pin) !== properties.getProperty('manager_pin_hash')) throw new Error('Clave incorrecta.');
+    const token = Utilities.getUuid() + Utilities.getUuid();
+    properties.setProperty(sessionKey(token), JSON.stringify({ expiresAt: Date.now() + 8 * 60 * 60 * 1000 }));
+    return { token: token };
+  }
+  if (action === 'requestManagerReset') {
+    const email = properties.getProperty('manager_recovery_email');
+    if (!email) throw new Error('No hay correo de recuperación configurado.');
+    const last = Number(properties.getProperty('manager_reset_last') || 0);
+    if (Date.now() - last < 5 * 60 * 1000) throw new Error('Esperá unos minutos antes de solicitar otro código.');
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    properties.setProperties({ manager_reset_code_hash: hashSecret(code), manager_reset_expires: String(Date.now() + 15 * 60 * 1000), manager_reset_last: String(Date.now()) });
+    MailApp.sendEmail(email, 'Código de recuperación — Parte Diario de Ventas', 'Tu código de recuperación es: ' + code + '. Vence en 15 minutos. Si no lo solicitaste, ignorá este correo.');
+    return { sent: 'true' };
+  }
+  if (action === 'resetManagerPin') {
+    if (!body.newPin || String(body.newPin).length < 8) throw new Error('La nueva clave debe tener al menos 8 caracteres.');
+    if (Date.now() > Number(properties.getProperty('manager_reset_expires') || 0) || hashSecret(body.code) !== properties.getProperty('manager_reset_code_hash')) throw new Error('El código es inválido o venció.');
+    properties.setProperty('manager_pin_hash', hashSecret(body.newPin));
+    properties.deleteProperty('manager_reset_code_hash'); properties.deleteProperty('manager_reset_expires');
+    return { reset: 'true' };
+  }
+  requireManager(body);
+  if (action === 'setActiveWebAppUrl') {
+    const url = String(body.webAppUrl || '').trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(url)) throw new Error('La URL debe ser una implementación pública de Google Apps Script.');
+    const config = ss.getSheetByName(SHEETS.CONFIG) || ss.insertSheet(SHEETS.CONFIG);
+    getUsadoPricing(ss);
+    const values = config.getDataRange().getValues();
+    let row = -1;
+    for (let i = 1; i < values.length; i++) if (String(values[i][0]).trim() === 'active_web_app_url') row = i + 1;
+    if (row < 0) config.appendRow(['active_web_app_url', url, 'URL activa de la base de datos para las aplicaciones']);
+    else config.getRange(row, 2).setValue(url);
+    return { webAppUrl: url };
+  }
+  throw new Error('Acción de Gerencia no reconocida.');
+}
+
+function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const destination = ensureDestinationSheet(ss);
@@ -190,9 +258,12 @@ function doPost(e) {
   if (!lock.tryLock(10000)) return jsonResponse({ status: 'error', message: 'La planilla está ocupada. Reintentá en unos segundos.' });
   try {
     const body = JSON.parse(e.postData && e.postData.contents || '{}');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (String(body.action || '').indexOf('manager') === 0 || body.action === 'setActiveWebAppUrl') {
+      return jsonResponse({ status: 'success', data: handleManagerAction(ss, body) });
+    }
     const numSuscripcion = String(body.numSuscripcion || '').trim();
     if (!numSuscripcion) return jsonResponse({ status: 'error', message: 'El N° de Suscripción es obligatorio.' });
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
     const destination = ensureDestinationSheet(ss);
     const subscriptionColumn = headerIndex(destination.headers, ['N° Suscripción']) + 1;
     if (destination.sheet.getLastRow() > 1) {

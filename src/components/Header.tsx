@@ -8,6 +8,7 @@ import {
   Download,
   CheckCircle2,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -15,6 +16,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 interface HeaderProps {
   onOpenHistory: () => void;
   onOpenSettings: () => void;
+  onOpenManager: () => void;
   isCustomSheetsConnected: boolean;
   pendingCount: number;
   todaySalesCount: number;
@@ -25,6 +27,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   onOpenSettings,
+  onOpenManager,
   isCustomSheetsConnected,
   pendingCount,
   todaySalesCount,
@@ -141,6 +144,15 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Settings Button */}
+          <button
+            onClick={onOpenManager}
+            id="btn-open-manager"
+            title="Gerencia: métricas y administración"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition"
+          >
+            <ShieldCheck className="h-4 w-4" />
+          </button>
+
           <button
             onClick={onOpenSettings}
             id="btn-open-settings"

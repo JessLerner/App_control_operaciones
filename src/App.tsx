@@ -4,6 +4,7 @@ import { ParteDiarioForm } from './components/ParteDiarioForm';
 import { SuccessModal } from './components/SuccessModal';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { RecentSalesDrawer } from './components/RecentSalesDrawer';
+import { ManagerModal } from './components/ManagerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import {
   ReferenceData,
@@ -40,6 +41,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
+  const [isManagerOpen, setIsManagerOpen] = useState(false);
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -169,6 +171,7 @@ export default function App() {
           setIsHistoryOpen(true);
         }}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenManager={() => setIsManagerOpen(true)}
         isCustomSheetsConnected={!!config.webAppUrl}
         pendingCount={pendingCount}
         todaySalesCount={todaySalesCount}
@@ -259,6 +262,18 @@ export default function App() {
         sales={currentDaySales}
         onSyncPending={async () => { await handleQuickSync(); await refreshFromCloud(); }}
         isSyncing={isSyncing}
+      />
+
+      <ManagerModal
+        isOpen={isManagerOpen}
+        onClose={() => setIsManagerOpen(false)}
+        sales={currentDaySales}
+        config={config}
+        onChangeConfig={(newConfig) => {
+          setConfig(newConfig);
+          saveStoredConfig(newConfig);
+        }}
+        onRefresh={refreshFromCloud}
       />
     </div>
   );

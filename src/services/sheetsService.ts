@@ -29,9 +29,11 @@ export function getStoredConfig(): SheetsConfig {
     const raw = localStorage.getItem(STORAGE_KEYS.CONFIG);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<SheetsConfig>;
-      // La base de datos es única para toda la operación: nunca aceptar una URL
-      // guardada por un navegador que pueda desviar las cargas a otra planilla.
-      return { ...DEFAULT_CONFIG, sheetNameDestino: parsed.sheetNameDestino || DEFAULT_CONFIG.sheetNameDestino };
+      return {
+        ...DEFAULT_CONFIG,
+        webAppUrl: parsed.webAppUrl || DEFAULT_CONFIG.webAppUrl,
+        sheetNameDestino: parsed.sheetNameDestino || DEFAULT_CONFIG.sheetNameDestino,
+      };
     }
   } catch (e) {
     console.error('Error leyendo config local:', e);
@@ -43,11 +45,29 @@ export function saveStoredConfig(config: SheetsConfig): void {
   try {
     localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify({
       ...config,
-      webAppUrl: DEFAULT_WEB_APP_URL,
       sheetNameDestino: DEFAULT_CONFIG.sheetNameDestino,
     }));
   } catch (e) {
     console.error('Error guardando config:', e);
+  }
+}
+
+export async function managerRequest<T extends Record<string, unknown>>(
+  url: string,
+  payload: Record<string, unknown>
+): Promise<{ success: boolean; data?: T; error?: string }> {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    const json = await response.json() as { status?: string; data?: T; message?: string };
+    return json.status === 'success'
+      ? { success: true, data: json.data }
+      : { success: false, error: json.message || 'No se pudo completar la operación.' };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
