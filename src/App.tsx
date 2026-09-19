@@ -260,6 +260,7 @@ export default function App() {
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
         sales={currentDaySales}
+        allSales={salesHistory}
         onSyncPending={async () => { await handleQuickSync(); await refreshFromCloud(); }}
         isSyncing={isSyncing}
       />

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   X,
   History,
@@ -7,6 +7,7 @@ import {
   Download,
   Car,
   Hash,
+  Mail,
 } from 'lucide-react';
 import { VentaRecord } from '../types';
 import { formatCurrency, formatDateLegible } from '../utils/formatters';
@@ -15,6 +16,7 @@ interface RecentSalesDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   sales: VentaRecord[];
+  allSales: VentaRecord[];
   onSyncPending: () => void;
   isSyncing: boolean;
 }
@@ -23,9 +25,12 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
   isOpen,
   onClose,
   sales,
+  allSales,
   onSyncPending,
   isSyncing,
 }) => {
+  const [reportPeriod, setReportPeriod] = useState<'day' | 'month'>('day');
+  const [reportEmail, setReportEmail] = useState('');
   // Cerrar con Escape
   useEffect(() => {
     if (!isOpen) return;
@@ -40,8 +45,13 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
 
   const pendingSales = sales.filter((s) => s.syncStatus !== 'synced');
 
-  const exportToCSV = () => {
-    if (sales.length === 0) return;
+  const reportSales = useMemo(() => {
+    if (reportPeriod === 'day') return sales;
+    const monthPrefix = new Date().toISOString().slice(0, 7);
+    return allSales.filter((sale) => sale.fecha.startsWith(monthPrefix));
+  }, [allSales, reportPeriod, sales]);
+
+  const buildCSV = (records: VentaRecord[]) => {
 
     const headers = [
       'N° Suscripción (PK)',
@@ -68,7 +78,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       'Estado Sync',
     ];
 
-    const rows = sales.map((s) => [
+    const rows = records.map((s) => [
       `"${s.numSuscripcion}"`,
       `"${s.fecha}"`,
       `"${s.cliente.replace(/"/g, '""')}"`,
@@ -93,20 +103,30 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       `"${s.syncStatus}"`,
     ]);
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,\uFEFF' +
-      [headers.join(';'), ...rows.map((e) => e.join(';'))].join('\n');
+    return [headers.join(';'), ...rows.map((e) => e.join(';'))].join('\n');
+  };
 
-    const encodedUri = encodeURI(csvContent);
+  const exportToCSV = () => {
+    if (reportSales.length === 0) return;
+    const blob = new Blob(['\uFEFF' + buildCSV(reportSales)], { type: 'text/csv;charset=utf-8' });
+    const href = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', href);
     link.setAttribute(
       'download',
-      `parte_diario_ventas_${new Date().toISOString().slice(0, 10)}.csv`
+      `parte_diario_ventas_${reportPeriod === 'day' ? new Date().toISOString().slice(0, 10) : new Date().toISOString().slice(0, 7)}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(href);
+  };
+
+  const openEmail = () => {
+    const periodLabel = reportPeriod === 'day' ? 'del día' : 'del mes';
+    const subject = `Parte diario de ventas ${periodLabel}`;
+    const body = `Adjunto el reporte de ventas ${periodLabel}.\n\nOperaciones: ${reportSales.length}\n\nEl archivo CSV se descarga desde la app para adjuntarlo a este correo.`;
+    window.location.href = `mailto:${encodeURIComponent(reportEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   return (
@@ -170,17 +190,14 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
             </div>
           )}
 
-          {sales.length > 0 && (
-            <button
-              type="button"
-              onClick={exportToCSV}
-              id="btn-exportar-csv"
-              className="flex items-center gap-1 rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition ml-auto"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>CSV</span>
-            </button>
-          )}
+        </div>
+
+        <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2.5">
+          <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-200">Enviar reporte</span><span className="text-[10px] text-slate-500">{reportSales.length} venta(s)</span></div>
+          <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setReportPeriod('day')} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${reportPeriod === 'day' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'}`}>Día</button><button type="button" onClick={() => setReportPeriod('month')} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${reportPeriod === 'month' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'}`}>Mes</button></div>
+          <input value={reportEmail} onChange={(event) => setReportEmail(event.target.value)} type="email" placeholder="Destinatario (opcional)" className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs" />
+          <div className="grid grid-cols-2 gap-2"><button type="button" disabled={!reportSales.length} onClick={exportToCSV} id="btn-exportar-csv" className="flex items-center justify-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-semibold text-slate-200 disabled:opacity-40"><Download className="h-3.5 w-3.5" />Descargar CSV</button><button type="button" disabled={!reportSales.length} onClick={openEmail} className="flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-40"><Mail className="h-3.5 w-3.5" />Abrir correo</button></div>
+          <p className="text-[10px] leading-relaxed text-slate-500">Descargá el CSV y adjuntalo al correo que se abre preparado.</p>
         </div>
 
         {/* List of Sales */}
