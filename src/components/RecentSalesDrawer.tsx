@@ -41,15 +41,17 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
-  const pendingSales = sales.filter((s) => s.syncStatus !== 'synced');
-
   const reportSales = useMemo(() => {
     if (reportPeriod === 'day') return sales;
     const monthPrefix = new Date().toISOString().slice(0, 7);
     return allSales.filter((sale) => sale.fecha.startsWith(monthPrefix));
   }, [allSales, reportPeriod, sales]);
+
+  // Los hooks deben ejecutarse siempre en el mismo orden. Si se retorna antes
+  // del useMemo, React falla al abrir el historial por segunda vez.
+  if (!isOpen) return null;
+
+  const pendingSales = sales.filter((s) => s.syncStatus !== 'synced');
 
   const buildCSV = (records: VentaRecord[]) => {
 
