@@ -111,14 +111,16 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   }, [montoCobrado, ctaFabrica, valorCuota1]);
 
   const usadoPricing = referenceData.usadoPricing || { anioCorte: 2016, descuentoHastaCorte: 0.3, descuentoDesdeCorte: 0.25 };
-  const descuentoUsado = typeof anoUsado === 'number' && anoUsado <= usadoPricing.anioCorte
-    ? usadoPricing.descuentoHastaCorte
-    : usadoPricing.descuentoDesdeCorte;
+  const descuentoUsado = typeof anoUsado === 'number'
+    ? (anoUsado <= usadoPricing.anioCorte
+      ? usadoPricing.descuentoHastaCorte
+      : usadoPricing.descuentoDesdeCorte)
+    : undefined;
 
   // La configuración llega de la pestaña Configuracion de Google Sheets.
   const cotizacionSugerida = useMemo<number | ''>(() => {
     if (typeof valorInfoauto === 'number' && valorInfoauto > 0) {
-      return Math.round(valorInfoauto * (1 - descuentoUsado));
+      return descuentoUsado === undefined ? '' : Math.round(valorInfoauto * (1 - descuentoUsado));
     }
     return '';
   }, [valorInfoauto, descuentoUsado]);
@@ -919,10 +921,12 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-amber-300">
                     <Calculator className="h-3.5 w-3.5 text-amber-400" />
-                    Cotización Sugerida (-{Math.round(descuentoUsado * 100)}%)
+                    Cotización Sugerida{descuentoUsado === undefined ? '' : ` (-${Math.round(descuentoUsado * 100)}%)`}
                   </span>
                   <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-700/50">
-                    <Lock className="h-2.5 w-2.5 text-amber-400" /> Año {typeof anoUsado === 'number' ? anoUsado : '—'} · Infoauto &times; {(1 - descuentoUsado).toFixed(2)}
+                    <Lock className="h-2.5 w-2.5 text-amber-400" /> {descuentoUsado === undefined
+                      ? 'Elegí el año para calcular'
+                      : `Año ${anoUsado} · Infoauto × ${(1 - descuentoUsado).toFixed(2)}`}
                   </span>
                 </label>
                 <div className="relative">
@@ -935,12 +939,14 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
                     value={formatNumberWithThousands(cotizacionSugerida)}
                     readOnly
                     disabled
-                    placeholder={`Infoauto - ${Math.round(descuentoUsado * 100)}%`}
+                    placeholder={descuentoUsado === undefined ? 'Ingresá el año del usado' : `Infoauto - ${Math.round(descuentoUsado * 100)}%`}
                     className="w-full rounded-xl border border-amber-500/40 bg-slate-950/70 pl-7 pr-3 py-2.5 text-sm font-mono font-bold text-amber-300 cursor-not-allowed select-none"
                   />
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>{Math.round((1 - descuentoUsado) * 100)}% de Infoauto</span>
+                  <span>{descuentoUsado === undefined
+                    ? `2016 o anterior: -${Math.round(usadoPricing.descuentoHastaCorte * 100)}% · 2017 o posterior: -${Math.round(usadoPricing.descuentoDesdeCorte * 100)}%`
+                    : `${Math.round((1 - descuentoUsado) * 100)}% de Infoauto`}</span>
                   {typeof cotizacionSugerida === 'number' && cotizacionSugerida > 0 && (
                     <button
                       type="button"

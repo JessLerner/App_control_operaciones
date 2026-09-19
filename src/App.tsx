@@ -84,7 +84,8 @@ export default function App() {
 
   // Calculate today's sales
   const todayStr = getTodayDateString();
-  const todaySalesCount = salesHistory.filter((s) => s.fecha === todayStr).length;
+  const currentDaySales = salesHistory.filter((s) => s.fecha === todayStr);
+  const todaySalesCount = currentDaySales.length;
   const pendingCount = salesHistory.filter((s) => s.syncStatus !== 'synced').length;
 
   // Auto-verificar suscripciones pendientes al cargar si hay URL configurada.
@@ -244,7 +245,7 @@ export default function App() {
       <RecentSalesDrawer
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
-        sales={salesHistory}
+        sales={currentDaySales}
         onSyncPending={async () => { await handleQuickSync(); await refreshFromCloud(); }}
         isSyncing={isSyncing}
       />

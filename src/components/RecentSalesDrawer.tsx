@@ -130,10 +130,10 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                Ventas Registradas ({sales.length})
+                Ventas de Hoy ({sales.length})
               </h2>
               <p className="text-xs text-slate-400">
-                Historial compartido desde Google Sheets
+                Operaciones del día actual, compartidas desde Google Sheets
               </p>
             </div>
           </div>
