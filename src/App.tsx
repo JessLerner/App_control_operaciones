@@ -267,7 +267,9 @@ export default function App() {
       <ManagerModal
         isOpen={isManagerOpen}
         onClose={() => setIsManagerOpen(false)}
-        sales={currentDaySales}
+        todaySales={currentDaySales}
+        sales={salesHistory}
+        referenceData={referenceData}
         config={config}
         onChangeConfig={(newConfig) => {
           setConfig(newConfig);
