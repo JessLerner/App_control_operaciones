@@ -42,7 +42,7 @@ export const ManagerModal: React.FC<ManagerModalProps> = ({ isOpen, onClose, sal
 
   if (!isOpen) return null;
 
-  const request = async (payload: Record<string, unknown>) => managerRequest<Record<string, string>>(config.webAppUrl, payload);
+  const request = async (payload: Record<string, unknown>) => managerRequest<Record<string, string>>('/api/manager', payload);
 
   const login = async () => {
     setBusy(true); setMessage('');
