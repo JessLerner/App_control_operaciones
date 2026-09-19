@@ -21,16 +21,11 @@ jobs:
       - name: Descargar código
         uses: actions/checkout@v4
 
-      - name: Preparar Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Instalar dependencias
-        run: bun install --frozen-lockfile
+        run: npm ci --legacy-peer-deps
 
       - name: Compilar prototipo
-        run: bun run build
+        run: npm run build
 
       - name: Preparar GitHub Pages
         uses: actions/configure-pages@v5
