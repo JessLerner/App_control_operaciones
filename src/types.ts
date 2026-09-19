@@ -26,6 +26,13 @@ export interface ReferenceData {
   suscripcionesExistentes?: string[]; // Para validación de clave única N° Suscripción
   lastUpdated?: string;
   isCustomUrl?: boolean;
+  usadoPricing?: UsadoPricingConfig;
+}
+
+export interface UsadoPricingConfig {
+  anioCorte: number;
+  descuentoHastaCorte: number;
+  descuentoDesdeCorte: number;
 }
 
 export type SenaOCompleta = 'Completa' | 'Seña' | 'Descuento Aprobado';
@@ -59,7 +66,7 @@ export interface VentaFormData {
   modeloUsado?: string;
   anoUsado?: number | '';
   valorInfoauto?: number | '';
-  cotizacionSugerida?: number | ''; // Valor Infoauto * 0.70 (30% de descuento)
+  cotizacionSugerida?: number | '';
   valorToma?: number | '';
   equipoVenta: string;
   vendedor: string;

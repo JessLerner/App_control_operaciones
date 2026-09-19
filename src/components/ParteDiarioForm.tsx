@@ -110,13 +110,18 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     return '';
   }, [montoCobrado, ctaFabrica, valorCuota1]);
 
-  // Cotización Sugerida = Valor Infoauto * 0.70 (30% de descuento automático)
+  const usadoPricing = referenceData.usadoPricing || { anioCorte: 2016, descuentoHastaCorte: 0.3, descuentoDesdeCorte: 0.25 };
+  const descuentoUsado = typeof anoUsado === 'number' && anoUsado <= usadoPricing.anioCorte
+    ? usadoPricing.descuentoHastaCorte
+    : usadoPricing.descuentoDesdeCorte;
+
+  // La configuración llega de la pestaña Configuracion de Google Sheets.
   const cotizacionSugerida = useMemo<number | ''>(() => {
     if (typeof valorInfoauto === 'number' && valorInfoauto > 0) {
-      return Math.round(valorInfoauto * 0.7);
+      return Math.round(valorInfoauto * (1 - descuentoUsado));
     }
     return '';
-  }, [valorInfoauto]);
+  }, [valorInfoauto, descuentoUsado]);
 
   // Validación de N° Suscripción duplicado en tiempo real (PRIMARY KEY)
   const isDuplicateSubscription = useMemo(() => {
@@ -909,15 +914,15 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
                 </p>
               </div>
 
-              {/* NUEVO: Cotización Sugerida (Infoauto - 30%, Solo Lectura) */}
+              {/* Cotización Sugerida, configurada desde Google Sheets */}
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-amber-300">
                     <Calculator className="h-3.5 w-3.5 text-amber-400" />
-                    Cotización Sugerida (-30%)
+                    Cotización Sugerida (-{Math.round(descuentoUsado * 100)}%)
                   </span>
                   <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-700/50">
-                    <Lock className="h-2.5 w-2.5 text-amber-400" /> Infoauto &times; 0.70
+                    <Lock className="h-2.5 w-2.5 text-amber-400" /> Año {typeof anoUsado === 'number' ? anoUsado : '—'} · Infoauto &times; {(1 - descuentoUsado).toFixed(2)}
                   </span>
                 </label>
                 <div className="relative">
@@ -930,12 +935,12 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
                     value={formatNumberWithThousands(cotizacionSugerida)}
                     readOnly
                     disabled
-                    placeholder="Infoauto - 30%"
+                    placeholder={`Infoauto - ${Math.round(descuentoUsado * 100)}%`}
                     className="w-full rounded-xl border border-amber-500/40 bg-slate-950/70 pl-7 pr-3 py-2.5 text-sm font-mono font-bold text-amber-300 cursor-not-allowed select-none"
                   />
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>70% de Infoauto</span>
+                  <span>{Math.round((1 - descuentoUsado) * 100)}% de Infoauto</span>
                   {typeof cotizacionSugerida === 'number' && cotizacionSugerida > 0 && (
                     <button
                       type="button"

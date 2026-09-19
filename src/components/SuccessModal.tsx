@@ -55,7 +55,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
 💵 *Monto Cobrado:* ${formatCurrency(data.montoCobrado)}
 🔄 *Entrega Usado:* ${data.entregaUsado}${
       data.entregaUsado === 'Sí'
-        ? ` (${data.modeloUsado} - ${data.anoUsado} | Infoauto: ${formatCurrency(data.valorInfoauto || 0)} | Cotiz. Sug (-30%): ${formatCurrency(cotizSug)} | Toma: ${formatCurrency(data.valorToma)})`
+        ? ` (${data.modeloUsado} - ${data.anoUsado} | Infoauto: ${formatCurrency(data.valorInfoauto || 0)} | Cotiz. Sug: ${formatCurrency(cotizSug)} | Toma: ${formatCurrency(data.valorToma)})`
         : ''
     }
 👥 *Equipo:* ${data.equipoVenta}
@@ -175,7 +175,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
               </div>
               <div className="flex justify-between text-[10px] text-amber-400/80">
                 <span>Infoauto: {formatCurrency(data.valorInfoauto || 0)}</span>
-                <span>Cotiz. Sugerida (-30%): {formatCurrency(data.cotizacionSugerida || Math.round(Number(data.valorInfoauto || 0) * 0.7))}</span>
+                <span>Cotiz. Sugerida: {formatCurrency(data.cotizacionSugerida || Math.round(Number(data.valorInfoauto || 0) * 0.7))}</span>
               </div>
             </div>
           )}

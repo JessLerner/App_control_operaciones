@@ -19,7 +19,6 @@ import {
   saveStoredReferenceData,
 } from '../services/sheetsService';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../services/appsScriptCode';
-import { INITIAL_REFERENCE_DATA } from '../data/initialReferenceData';
 
 interface SheetsConfigModalProps {
   isOpen: boolean;
@@ -39,7 +38,6 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
   onUpdateReferenceData,
 }) => {
   const [activeTab, setActiveTab] = useState<'connection' | 'script' | 'guide'>('connection');
-  const [url, setUrl] = useState(config.webAppUrl || '');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -53,26 +51,11 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
     setIsTesting(true);
     setTestResult(null);
 
-    const cleanUrl = url.trim();
-
-    if (!cleanUrl) {
-      // Guardar modo local
-      const newConfig: SheetsConfig = { ...config, webAppUrl: '' };
-      onSaveConfig(newConfig);
-      saveStoredConfig(newConfig);
-      setIsTesting(false);
-      setTestResult({
-        success: true,
-        message: 'Modo Local / Demo activado con el catálogo predeterminado.',
-      });
-      return;
-    }
-
-    const res = await fetchRemoteReferenceData(cleanUrl);
+    const res = await fetchRemoteReferenceData(config.webAppUrl);
     setIsTesting(false);
 
     if (res.success && res.data) {
-      const newConfig: SheetsConfig = { ...config, webAppUrl: cleanUrl };
+      const newConfig: SheetsConfig = { ...config };
       onSaveConfig(newConfig);
       saveStoredConfig(newConfig);
       onUpdateReferenceData(res.data);
@@ -93,15 +76,6 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
     navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
     setCopiedScript(true);
     setTimeout(() => setCopiedScript(false), 2500);
-  };
-
-  const handleResetDefaults = () => {
-    onUpdateReferenceData(INITIAL_REFERENCE_DATA);
-    saveStoredReferenceData(INITIAL_REFERENCE_DATA);
-    setTestResult({
-      success: true,
-      message: 'Catálogo de modelos, equipos y orígenes restablecido a valores oficiales.',
-    });
   };
 
   return (
@@ -141,7 +115,7 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
             }`}
           >
             <Link2 className="h-3.5 w-3.5" />
-            Conexión Web App
+            Estado de sincronización
           </button>
           <button
             onClick={() => setActiveTab('script')}
@@ -172,18 +146,10 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
           {activeTab === 'connection' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  URL de la Aplicación Web de Google Apps Script:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    id="input-webapp-url"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-xs font-mono text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
-                  />
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+                  Esta aplicación usa una única base de datos de Google Sheets configurada por administración. La dirección no se puede cambiar desde los dispositivos, para evitar que una carga vaya a otra planilla.
+                </div>
+                <div className="mt-3 flex gap-2">
                   <button
                     type="button"
                     onClick={handleTestAndSave}
@@ -195,11 +161,11 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
                     ) : (
                       <CheckCircle className="h-3.5 w-3.5" />
                     )}
-                    <span>{url ? 'Probar y Guardar' : 'Usar Modo Local'}</span>
+                    <span>Actualizar ahora</span>
                   </button>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Pega aquí la URL generada al hacer "Implementar como aplicación web" en Apps Script.
+                  Al abrir la app, los catálogos, porcentajes e historial se actualizan automáticamente.
                 </p>
               </div>
 
@@ -255,15 +221,6 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
                     </div>
                     <div className="text-[10px] text-slate-400">Orígenes (AGP)</div>
                   </div>
-                </div>
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={handleResetDefaults}
-                    className="text-[11px] text-slate-400 hover:text-white underline"
-                  >
-                    Restablecer catálogo oficial inicial
-                  </button>
                 </div>
               </div>
             </div>

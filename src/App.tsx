@@ -71,6 +71,7 @@ export default function App() {
     fetchRemoteReferenceData(config.webAppUrl).then((result) => {
       if (isCurrent && result.success && result.data) {
         setReferenceData(result.data);
+        setSalesHistory(result.sales || getSalesHistory());
       } else if (isCurrent && !result.success) {
         console.warn('No se pudo actualizar el catálogo remoto:', result.error);
       }
@@ -86,12 +87,20 @@ export default function App() {
   const todaySalesCount = salesHistory.filter((s) => s.fecha === todayStr).length;
   const pendingCount = salesHistory.filter((s) => s.syncStatus !== 'synced').length;
 
-  // Auto-verificar suscripciones pendientes al cargar si hay URL configurada
+  // Auto-verificar suscripciones pendientes al cargar si hay URL configurada.
   useEffect(() => {
     if (config.webAppUrl && pendingCount > 0) {
       syncPendingSales().then(() => {
         setSalesHistory(getSalesHistory());
       });
+    }
+  }, [config.webAppUrl]);
+
+  const refreshFromCloud = useCallback(async () => {
+    const result = await fetchRemoteReferenceData(config.webAppUrl);
+    if (result.success && result.data) {
+      setReferenceData(result.data);
+      setSalesHistory(result.sales || getSalesHistory());
     }
   }, [config.webAppUrl]);
 
@@ -143,6 +152,7 @@ export default function App() {
       {/* Header */}
       <Header
         onOpenHistory={() => {
+          void refreshFromCloud();
           setSalesHistory(getSalesHistory());
           setIsHistoryOpen(true);
         }}
@@ -235,7 +245,7 @@ export default function App() {
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
         sales={salesHistory}
-        onSyncPending={handleQuickSync}
+        onSyncPending={async () => { await handleQuickSync(); await refreshFromCloud(); }}
         isSyncing={isSyncing}
       />
     </div>

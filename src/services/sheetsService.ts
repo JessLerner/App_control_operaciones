@@ -1,4 +1,4 @@
-import { ReferenceData, VentaFormData, VentaRecord, SheetsConfig, ModeloPlanItem } from '../types';
+import { ReferenceData, VentaFormData, VentaRecord, SheetsConfig, ModeloPlanItem, UsadoPricingConfig } from '../types';
 import { INITIAL_REFERENCE_DATA, INITIAL_MODELOS_Y_PRECIOS } from '../data/initialReferenceData';
 
 const STORAGE_KEYS = {
@@ -18,15 +18,20 @@ export const DEFAULT_CONFIG: SheetsConfig = {
   sheetNameDestino: 'ID Ventas',
 };
 
+export const DEFAULT_USADO_PRICING: UsadoPricingConfig = {
+  anioCorte: 2016,
+  descuentoHastaCorte: 0.3,
+  descuentoDesdeCorte: 0.25,
+};
+
 export function getStoredConfig(): SheetsConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CONFIG);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<SheetsConfig>;
-      return {
-        ...DEFAULT_CONFIG,
-        ...parsed,
-      };
+      // La base de datos es única para toda la operación: nunca aceptar una URL
+      // guardada por un navegador que pueda desviar las cargas a otra planilla.
+      return { ...DEFAULT_CONFIG, sheetNameDestino: parsed.sheetNameDestino || DEFAULT_CONFIG.sheetNameDestino };
     }
   } catch (e) {
     console.error('Error leyendo config local:', e);
@@ -36,7 +41,11 @@ export function getStoredConfig(): SheetsConfig {
 
 export function saveStoredConfig(config: SheetsConfig): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify({
+      ...config,
+      webAppUrl: DEFAULT_WEB_APP_URL,
+      sheetNameDestino: DEFAULT_CONFIG.sheetNameDestino,
+    }));
   } catch (e) {
     console.error('Error guardando config:', e);
   }
@@ -99,6 +108,48 @@ export function saveSalesHistory(sales: VentaRecord[]): void {
   }
 }
 
+function subscriptionKey(value: string): string {
+  return String(value || '').trim().toLocaleLowerCase();
+}
+
+function numberValue(value: unknown): number | '' {
+  if (value === '' || value === null || value === undefined) return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : '';
+}
+
+function mapRemoteSale(raw: Record<string, unknown>): VentaRecord | null {
+  const numSuscripcion = String(raw.numSuscripcion || '').trim();
+  if (!numSuscripcion) return null;
+  return {
+    fecha: String(raw.fecha || ''), cliente: String(raw.cliente || ''), numSuscripcion,
+    marca: String(raw.marca || '') as VentaRecord['marca'], modelo: String(raw.modelo || ''),
+    tipoPlan: String(raw.tipoPlan || ''), senaOCompleta: (String(raw.senaOCompleta || 'Completa') as VentaRecord['senaOCompleta']),
+    autorizoDescuento: String(raw.autorizoDescuento || ''), valorCuota1: numberValue(raw.valorCuota1),
+    ctaFabrica: numberValue(raw.ctaFabrica), sobrepauta: numberValue(raw.sobrepauta),
+    montoCobrado: numberValue(raw.montoCobrado), entregaUsado: String(raw.entregaUsado || 'No') === 'Sí' ? 'Sí' : 'No',
+    modeloUsado: String(raw.modeloUsado || ''), anoUsado: numberValue(raw.anoUsado),
+    valorInfoauto: numberValue(raw.valorInfoauto), cotizacionSugerida: numberValue(raw.cotizacionSugerida),
+    valorToma: numberValue(raw.valorToma), equipoVenta: String(raw.equipoVenta || ''),
+    vendedor: String(raw.vendedor || ''), origenDato: String(raw.origenDato || ''),
+    timestamp: Number(raw.timestamp) || Date.now(), syncStatus: 'synced',
+  };
+}
+
+export function mergeRemoteSales(remoteSales: Array<Record<string, unknown>>): VentaRecord[] {
+  const localByKey = new Map(getSalesHistory().map((sale) => [subscriptionKey(sale.numSuscripcion), sale]));
+  const merged = remoteSales.map(mapRemoteSale).filter((sale): sale is VentaRecord => sale !== null).map((remote) => {
+    const local = localByKey.get(subscriptionKey(remote.numSuscripcion));
+    localByKey.delete(subscriptionKey(remote.numSuscripcion));
+    return local?.syncStatus === 'pending' ? local : remote;
+  });
+  // Las cargas aún no confirmadas no se pierden aunque el dispositivo esté sin conexión.
+  for (const local of localByKey.values()) if (local.syncStatus !== 'synced') merged.push(local);
+  merged.sort((a, b) => b.timestamp - a.timestamp);
+  saveSalesHistory(merged);
+  return merged;
+}
+
 /**
  * Verifica si un N° de Suscripción ya existe en el historial local o en la base descargada
  */
@@ -128,7 +179,7 @@ export function checkSubscriptionExists(numSuscripcion: string): boolean {
  * Consulta a la Google Apps Script Web App para sincronizar las 3 tablas de referencia
  * y la lista de suscripciones existentes (Primary Key)
  */
-export async function fetchRemoteReferenceData(url: string): Promise<{ success: boolean; data?: ReferenceData; error?: string }> {
+export async function fetchRemoteReferenceData(url: string): Promise<{ success: boolean; data?: ReferenceData; sales?: VentaRecord[]; error?: string }> {
   if (!url || !url.startsWith('http')) {
     return { success: false, error: 'URL no configurada o inválida' };
   }
@@ -177,9 +228,19 @@ export async function fetchRemoteReferenceData(url: string): Promise<{ success: 
         suscripcionesExistentes: json.data.suscripcionesExistentes || [],
         lastUpdated: new Date().toISOString(),
         isCustomUrl: true,
+        usadoPricing: {
+          anioCorte: Number(json.data.usadoPricing?.anioCorte) || DEFAULT_USADO_PRICING.anioCorte,
+          descuentoHastaCorte: Number(json.data.usadoPricing?.descuentoHastaCorte) || DEFAULT_USADO_PRICING.descuentoHastaCorte,
+          descuentoDesdeCorte: Number(json.data.usadoPricing?.descuentoDesdeCorte) || DEFAULT_USADO_PRICING.descuentoDesdeCorte,
+        },
       };
       saveStoredReferenceData(refData);
-      return { success: true, data: refData };
+      // Solo reemplazamos el historial local si el backend confirmó que incluyó ventas.
+      // Así una versión anterior o una respuesta parcial nunca borra lo ya visible.
+      const sales = Array.isArray(json.data.ventas)
+        ? mergeRemoteSales(json.data.ventas)
+        : getSalesHistory();
+      return { success: true, data: refData, sales };
     } else {
       throw new Error(json.message || 'Estructura de respuesta no válida desde Google Sheets');
     }

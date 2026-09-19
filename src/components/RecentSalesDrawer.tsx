@@ -133,7 +133,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
                 Ventas Registradas ({sales.length})
               </h2>
               <p className="text-xs text-slate-400">
-                Historial guardado en este dispositivo
+                Historial compartido desde Google Sheets
               </p>
             </div>
           </div>
@@ -244,7 +244,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
                       Usado: <strong>{sale.modeloUsado}</strong> ({sale.anoUsado}) &bull; Toma: <strong>{formatCurrency(sale.valorToma)}</strong>
                     </div>
                     <div className="text-[9px] text-amber-400/70">
-                      Infoauto: {formatCurrency(sale.valorInfoauto || 0)} &bull; Cotiz. Sugerida (-30%): {formatCurrency(sale.cotizacionSugerida || Math.round(Number(sale.valorInfoauto || 0) * 0.7))}
+                      Infoauto: {formatCurrency(sale.valorInfoauto || 0)} &bull; Cotiz. Sugerida: {formatCurrency(sale.cotizacionSugerida || Math.round(Number(sale.valorInfoauto || 0) * 0.7))}
                     </div>
                   </div>
                 )}

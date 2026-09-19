@@ -1,411 +1,224 @@
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
- * =========================================================================
- * PARTE DIARIO DE VENTAS - BACKEND GOOGLE APPS SCRIPT (Codigo.gs)
- * Concesionario Automotriz - Sincronización PWA / Web App
- * =========================================================================
- * 
- * INSTRUCCIONES DE ACTUALIZACIÓN RÁPIDA:
- * 1. En tu Google Sheets, abre el menú: Extensiones > Apps Script.
- * 2. Selecciona todo el código existente en 'Codigo.gs', bórralo y pega este código completo.
- * 3. Haz clic en el icono de disco "Guardar proyecto" (o Ctrl+S).
- * 4. Haz clic en "Implementar" (Deploy) > "Administrar implementaciones" (Manage deployments).
- * 5. Haz clic en el lápiz (Editar), selecciona Versión: "Nueva versión" (New version) y pulsa "Implementar".
- *    (O bien "Nueva implementación" > "Aplicación web" > Quién tiene acceso: "Cualquier usuario").
- * 
- * ¡Listo! Ahora el script creará automáticamente las columnas 'Cta. Fábrica' y 'Sobrepauta'
- * si no existían en 'ID Ventas' y completará los valores en cada nueva venta.
+ * PARTE DIARIO DE VENTAS — backend de Google Apps Script
+ * La hoja ID Ventas es la fuente única: la app lee y escribe allí.
  */
-
-// Nombres exactos de las pestañas
 const SHEETS = {
   DESTINO: 'ID Ventas',
-  MODELOS_PRECIOS: 'Modelos_y_Precios',
+  MODELOS: 'Modelos_y_Precios',
   EQUIPOS: 'Equipos_de_venta',
-  ORIGEN: 'Origen_datos'
+  ORIGEN: 'Origen_datos',
+  CONFIG: 'Configuracion'
 };
 
-/**
- * Endpoint GET: Lee las tablas de referencia y suscripciones existentes
- */
-function doGet(e) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // 1. Modelos y Precios
-    const sheetModelos = ss.getSheetByName(SHEETS.MODELOS_PRECIOS);
-    const modelosYPrecios = [];
-    if (sheetModelos) {
-      const dataModelos = sheetModelos.getDataRange().getValues();
-      if (dataModelos.length > 1) {
-        // Localizar la fila de cabeceras dinámicamente
-        var headerRowIdx = 0;
-        for (var r = 0; r < Math.min(6, dataModelos.length); r++) {
-          var rowStr = dataModelos[r].join(' ').toLowerCase();
-          if (rowStr.includes('marca') || rowStr.includes('modelo')) {
-            headerRowIdx = r;
-            break;
-          }
-        }
+const HEADERS = [
+  'N° Suscripción', 'Fecha', 'Cliente', 'Marca', 'Modelo', 'Tipo de Plan',
+  'Seña o Completa', 'Valor Cuota #1', 'Monto Cobrado', 'Autorizó Descuento',
+  'Cta. Fábrica', 'Sobrepauta', '¿Entrega Usado?', 'Modelo Usado', 'Año Usado',
+  'Valor Infoauto', 'Cotización Sugerida', 'Valor Toma', 'Equipo de Venta',
+  'Vendedor', 'Origen del Dato', 'Timestamp'
+];
 
-        var headers = dataModelos[headerRowIdx].map(function(h) {
-          return String(h || '').trim().toLowerCase();
-        });
-
-        var colMarca = -1, colModelo = -1, colPlan = -1, colCuota1 = -1, colCtaFabrica = -1;
-        for (var c = 0; c < headers.length; c++) {
-          var h = headers[c];
-          if (colMarca === -1 && h.includes('marca')) {
-            colMarca = c;
-          } else if (colModelo === -1 && h.includes('modelo')) {
-            colModelo = c;
-          } else if (colPlan === -1 && (h.includes('plan') || h.includes('tipo'))) {
-            colPlan = c;
-          } else if (colCtaFabrica === -1 && (h.includes('fáb') || h.includes('fab') || h.includes('terminal') || h.includes('costo'))) {
-            colCtaFabrica = c;
-          } else if (colCuota1 === -1 && (h.includes('cuota') || h.includes('valor') || h.includes('lista') || h.includes('precio') || h.includes('cta'))) {
-            colCuota1 = c;
-          }
-        }
-
-        if (colMarca === -1) colMarca = 0;
-        if (colModelo === -1) colModelo = 1;
-        if (colPlan === -1) colPlan = 2;
-        if (colCuota1 === -1) colCuota1 = 3;
-        if (colCtaFabrica === -1) {
-          // Si no hay columna explícita con nombre Fábrica, buscar si hay una 5ta columna (índice 4)
-          colCtaFabrica = headers.length > 4 ? 4 : colCuota1;
-        }
-
-        for (var i = headerRowIdx + 1; i < dataModelos.length; i++) {
-          var row = dataModelos[i];
-          var marca = String(row[colMarca] || '').trim().toUpperCase();
-          var modelo = String(row[colModelo] || '').trim();
-          var tipoPlan = String(row[colPlan] || '').trim();
-          var valorCuota1 = parseFloat(String(row[colCuota1] || '').replace(/[^0-9.-]/g, '')) || 0;
-          
-          var rawCtaFab = row[colCtaFabrica];
-          var ctaFabrica = parseFloat(String(rawCtaFab || '').replace(/[^0-9.-]/g, '')) || 0;
-          if (!ctaFabrica && valorCuota1) {
-            ctaFabrica = valorCuota1;
-          }
-
-          if (marca && modelo) {
-            modelosYPrecios.push({
-              marca: marca,
-              modelo: modelo,
-              tipoPlan: tipoPlan,
-              valorCuota1: valorCuota1,
-              ctaFabrica: ctaFabrica
-            });
-          }
-        }
-      }
-    }
-
-    // 2. Equipos de venta (Cabecera en Fila 18 o dinámica)
-    const sheetEquipos = ss.getSheetByName(SHEETS.EQUIPOS);
-    const equiposDeVenta = [];
-    if (sheetEquipos) {
-      const lastRow = sheetEquipos.getLastRow();
-      const lastCol = sheetEquipos.getLastColumn();
-      
-      var equipHeaderRow = 18;
-      // Si la fila 18 no tiene datos, buscar la primera fila no vacía
-      if (lastRow < 18) {
-        equipHeaderRow = 1;
-      }
-
-      if (lastRow >= equipHeaderRow && lastCol >= 1) {
-        const range = sheetEquipos.getRange(equipHeaderRow, 1, lastRow - equipHeaderRow + 1, lastCol).getValues();
-        const headers = range[0];
-        
-        for (let c = 0; c < lastCol; c++) {
-          const supervisor = String(headers[c] || '').trim();
-          if (supervisor && supervisor.toUpperCase() !== 'EQUIPOS' && supervisor.toUpperCase() !== 'SUPERVISOR') {
-            const vendedores = [];
-            for (let r = 1; r < range.length; r++) {
-              const vendedor = String(range[r][c] || '').trim();
-              if (vendedor) {
-                vendedores.push(vendedor);
-              }
-            }
-            if (vendedores.length > 0) {
-              equiposDeVenta.push({
-                supervisor: supervisor,
-                vendedores: vendedores
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // 3. Origen de datos (Columna AGP)
-    const sheetOrigen = ss.getSheetByName(SHEETS.ORIGEN);
-    const origenesDatos = [];
-    if (sheetOrigen) {
-      const dataOrigen = sheetOrigen.getDataRange().getValues();
-      for (let i = 1; i < dataOrigen.length; i++) {
-        const agp = String(dataOrigen[i][0] || '').trim();
-        if (agp) {
-          origenesDatos.push(agp);
-        }
-      }
-    }
-
-    // 4. Suscripciones existentes en 'ID Ventas' para validación de clave única
-    const sheetDestino = ss.getSheetByName(SHEETS.DESTINO);
-    const suscripcionesExistentes = [];
-    if (sheetDestino && sheetDestino.getLastRow() > 1) {
-      const dataDestino = sheetDestino.getRange(2, 1, sheetDestino.getLastRow() - 1, 1).getValues();
-      for (let i = 0; i < dataDestino.length; i++) {
-        const num = String(dataDestino[i][0] || '').trim();
-        if (num) suscripcionesExistentes.push(num);
-      }
-    }
-
-    const payload = {
-      status: 'success',
-      data: {
-        modelosYPrecios: modelosYPrecios,
-        equiposDeVenta: equiposDeVenta,
-        origenesDatos: origenesDatos,
-        suscripcionesExistentes: suscripcionesExistentes,
-        lastUpdated: new Date().toISOString()
-      }
-    };
-
-    return ContentService
-      .createTextOutput(JSON.stringify(payload))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+function jsonResponse(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Endpoint POST: Registra una nueva venta con asignación inteligente de columnas
- */
+function key(text) {
+  return String(text || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+}
+
+function numberValue(value, fallback) {
+  if (value === '' || value === null || value === undefined) return fallback;
+  const result = Number(String(value).replace(/[^0-9.-]/g, ''));
+  return isNaN(result) ? fallback : result;
+}
+
+function dateValue(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value)) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(value || '');
+}
+
+function headerIndex(headers, names) {
+  const normalized = headers.map(key);
+  for (let i = 0; i < names.length; i++) {
+    const position = normalized.indexOf(key(names[i]));
+    if (position >= 0) return position;
+  }
+  return -1;
+}
+
+function ensureDestinationSheet(ss) {
+  let sheet = ss.getSheetByName(SHEETS.DESTINO);
+  if (!sheet) sheet = ss.insertSheet(SHEETS.DESTINO);
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  let headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  if (!headers.some(function(value) { return String(value).trim(); })) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    return { sheet: sheet, headers: HEADERS.slice() };
+  }
+  HEADERS.forEach(function(required) {
+    if (headerIndex(headers, [required]) < 0) {
+      headers.push(required);
+      sheet.getRange(1, headers.length).setValue(required);
+    }
+  });
+  return { sheet: sheet, headers: headers };
+}
+
+function getUsadoPricing(ss) {
+  let sheet = ss.getSheetByName(SHEETS.CONFIG);
+  if (!sheet) sheet = ss.insertSheet(SHEETS.CONFIG);
+  const defaults = [
+    ['Clave', 'Valor', 'Descripción'],
+    ['anio_corte_usado', 2016, 'Año incluido en el descuento de vehículos más antiguos'],
+    ['descuento_hasta_anio_corte', 0.30, 'Descuento para año menor o igual al corte'],
+    ['descuento_desde_anio_corte', 0.25, 'Descuento para año posterior al corte']
+  ];
+  if (sheet.getLastRow() === 0 || !String(sheet.getRange(1, 1).getValue()).trim()) {
+    sheet.getRange(1, 1, defaults.length, 3).setValues(defaults);
+    sheet.getRange(2, 2).setNumberFormat('0');
+    sheet.getRange(3, 2, 2, 1).setNumberFormat('0%');
+  }
+  const values = sheet.getDataRange().getValues();
+  const settings = {};
+  for (let row = 1; row < values.length; row++) settings[String(values[row][0] || '').trim()] = values[row][1];
+  return {
+    anioCorte: numberValue(settings.anio_corte_usado, 2016),
+    descuentoHastaCorte: numberValue(settings.descuento_hasta_anio_corte, 0.30),
+    descuentoDesdeCorte: numberValue(settings.descuento_desde_anio_corte, 0.25)
+  };
+}
+
+function getModelos(ss) {
+  const sheet = ss.getSheetByName(SHEETS.MODELOS);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const marca = headerIndex(headers, ['Marca']);
+  const modelo = headerIndex(headers, ['Modelo']);
+  const plan = headerIndex(headers, ['Tipo de Plan', 'Plan', 'Tipo']);
+  const cuota = headerIndex(headers, ['Valor Cuota #1', 'Cuota #1', 'Cuota', 'Valor']);
+  const fabrica = headerIndex(headers, ['Cta. Fábrica', 'Cta Fabrica', 'Fábrica', 'Fabrica']);
+  return values.slice(1).map(function(row) {
+    const cuota1 = numberValue(row[cuota >= 0 ? cuota : 3], 0);
+    return {
+      marca: String(row[marca >= 0 ? marca : 0] || '').trim().toUpperCase(),
+      modelo: String(row[modelo >= 0 ? modelo : 1] || '').trim(),
+      tipoPlan: String(row[plan >= 0 ? plan : 2] || '').trim(),
+      valorCuota1: cuota1,
+      ctaFabrica: numberValue(row[fabrica >= 0 ? fabrica : cuota], cuota1)
+    };
+  }).filter(function(item) { return item.marca && item.modelo; });
+}
+
+function getEquipos(ss) {
+  const sheet = ss.getSheetByName(SHEETS.EQUIPOS);
+  if (!sheet || sheet.getLastRow() === 0) return [];
+  const headerRow = sheet.getLastRow() >= 18 ? 18 : 1;
+  const values = sheet.getRange(headerRow, 1, sheet.getLastRow() - headerRow + 1, sheet.getLastColumn()).getValues();
+  return values[0].map(function(supervisor, column) {
+    const name = String(supervisor || '').trim();
+    const vendedores = values.slice(1).map(function(row) { return String(row[column] || '').trim(); }).filter(Boolean);
+    return { supervisor: name, vendedores: vendedores };
+  }).filter(function(team) { return team.supervisor && key(team.supervisor) !== 'equipos' && team.vendedores.length; });
+}
+
+function getOrigenes(ss) {
+  const sheet = ss.getSheetByName(SHEETS.ORIGEN);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues()
+    .map(function(row) { return String(row[0] || '').trim(); }).filter(Boolean);
+}
+
+function fieldForHeader(header) {
+  const value = key(header);
+  if (value.indexOf('suscrip') >= 0) return 'numSuscripcion';
+  if (value.indexOf('fecha') >= 0) return 'fecha';
+  if (value.indexOf('cliente') >= 0) return 'cliente';
+  if (value === 'marca') return 'marca';
+  if (value.indexOf('modelo') >= 0 && value.indexOf('usado') < 0) return 'modelo';
+  if (value.indexOf('plan') >= 0 || value === 'tipo') return 'tipoPlan';
+  if (value.indexOf('sena') >= 0 || value.indexOf('completa') >= 0) return 'senaOCompleta';
+  if (value.indexOf('autoriz') >= 0) return 'autorizoDescuento';
+  if (value.indexOf('fabrica') >= 0 || value.indexOf('cta') >= 0) return 'ctaFabrica';
+  if (value.indexOf('sobrepauta') >= 0) return 'sobrepauta';
+  if (value.indexOf('cuota') >= 0) return 'valorCuota1';
+  if (value.indexOf('cobrado') >= 0 || value.indexOf('monto') >= 0) return 'montoCobrado';
+  if (value.indexOf('entrega') >= 0) return 'entregaUsado';
+  if (value.indexOf('modelo') >= 0 && value.indexOf('usado') >= 0) return 'modeloUsado';
+  if (value.indexOf('ano') >= 0) return 'anoUsado';
+  if (value.indexOf('infoauto') >= 0) return 'valorInfoauto';
+  if (value.indexOf('sugerida') >= 0 || value.indexOf('cotiz') >= 0) return 'cotizacionSugerida';
+  if (value.indexOf('toma') >= 0) return 'valorToma';
+  if (value.indexOf('equipo') >= 0 || value.indexOf('supervisor') >= 0) return 'equipoVenta';
+  if (value.indexOf('vendedor') >= 0) return 'vendedor';
+  if (value.indexOf('origen') >= 0) return 'origenDato';
+  if (value.indexOf('timestamp') >= 0) return 'timestamp';
+  return '';
+}
+
+function getVentas(destination) {
+  if (destination.sheet.getLastRow() < 2) return [];
+  const rows = destination.sheet.getRange(2, 1, destination.sheet.getLastRow() - 1, destination.headers.length).getValues();
+  return rows.map(function(row) {
+    const sale = {};
+    destination.headers.forEach(function(header, index) {
+      const field = fieldForHeader(header);
+      if (field) sale[field] = field === 'fecha' ? dateValue(row[index]) : row[index];
+    });
+    return sale;
+  }).filter(function(sale) { return String(sale.numSuscripcion || '').trim(); });
+}
+
+function doGet() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const destination = ensureDestinationSheet(ss);
+    const ventas = getVentas(destination);
+    return jsonResponse({ status: 'success', data: {
+      modelosYPrecios: getModelos(ss), equiposDeVenta: getEquipos(ss), origenesDatos: getOrigenes(ss),
+      suscripcionesExistentes: ventas.map(function(sale) { return String(sale.numSuscripcion).trim(); }),
+      ventas: ventas, usadoPricing: getUsadoPricing(ss), lastUpdated: new Date().toISOString()
+    }});
+  } catch (error) { return jsonResponse({ status: 'error', message: String(error) }); }
+}
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
-  const lockAcquired = lock.tryLock(10000);
-
-  if (!lockAcquired) {
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        status: 'error',
-        message: 'No se pudo bloquear la planilla. Reintentá la carga en unos segundos.'
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-  
+  if (!lock.tryLock(10000)) return jsonResponse({ status: 'error', message: 'La planilla está ocupada. Reintentá en unos segundos.' });
   try {
-    const rawData = e.postData ? e.postData.contents : '';
-    const body = JSON.parse(rawData);
-    
+    const body = JSON.parse(e.postData && e.postData.contents || '{}');
     const numSuscripcion = String(body.numSuscripcion || '').trim();
-    if (!numSuscripcion) {
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          status: 'error',
-          message: 'El N° de Suscripción es obligatorio (Clave Principal).'
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
+    if (!numSuscripcion) return jsonResponse({ status: 'error', message: 'El N° de Suscripción es obligatorio.' });
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheetDestino = ss.getSheetByName(SHEETS.DESTINO);
-    
-    if (!sheetDestino) {
-      sheetDestino = ss.insertSheet(SHEETS.DESTINO);
-    }
-
-    // VALIDACIÓN DE CLAVE ÚNICA (PRIMARY KEY)
-    const lastRow = sheetDestino.getLastRow();
-    if (lastRow > 1) {
-      const existingSubs = sheetDestino.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = 0; i < existingSubs.length; i++) {
-        if (String(existingSubs[i][0]).trim() === numSuscripcion) {
-          return ContentService
-            .createTextOutput(JSON.stringify({
-              status: 'error',
-              message: 'El N° de Suscripción ' + numSuscripcion + ' ya existe en la base de datos (clave duplicada).'
-            }))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
+    const destination = ensureDestinationSheet(ss);
+    const subscriptionColumn = headerIndex(destination.headers, ['N° Suscripción']) + 1;
+    if (destination.sheet.getLastRow() > 1) {
+      const existing = destination.sheet.getRange(2, subscriptionColumn, destination.sheet.getLastRow() - 1, 1).getValues();
+      if (existing.some(function(row) { return key(row[0]) === key(numSuscripcion); })) {
+        return jsonResponse({ status: 'error', message: 'El N° de Suscripción ' + numSuscripcion + ' ya existe en la base de datos.' });
       }
     }
-
-    // RESOLVER CTA. FÁBRICA Y SOBREPAUTA
-    var finalCtaFabrica = Number(body.ctaFabrica) || Number(body.cta_fabrica) || Number(body.cuotaFabrica) || 0;
-    
-    // Si no vino en el body o es 0, buscarla directamente en la hoja Modelos_y_Precios del spreadsheet
-    if (!finalCtaFabrica && body.marca && body.modelo) {
-      var sheetModelos = ss.getSheetByName(SHEETS.MODELOS_PRECIOS);
-      if (sheetModelos) {
-        var mRange = sheetModelos.getDataRange().getValues();
-        for (var m = 1; m < mRange.length; m++) {
-          var rowM = mRange[m];
-          var rowMarca = String(rowM[0] || '').trim().toUpperCase();
-          var rowModelo = String(rowM[1] || '').trim().toLowerCase();
-          var rowPlan = String(rowM[2] || '').trim().toLowerCase();
-          
-          if (rowMarca === String(body.marca || '').trim().toUpperCase() &&
-              rowModelo === String(body.modelo || '').trim().toLowerCase()) {
-            if (!body.tipoPlan || rowPlan === String(body.tipoPlan || '').trim().toLowerCase()) {
-              var fabVal = parseFloat(String(rowM[4] !== undefined && rowM[4] !== '' ? rowM[4] : rowM[3] || 0).replace(/[^0-9.-]/g, '')) || 0;
-              if (fabVal > 0) {
-                finalCtaFabrica = fabVal;
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    if (!finalCtaFabrica) {
-      finalCtaFabrica = Number(body.valorCuota1) || 0;
-    }
-
-    var finalMontoCobrado = Number(body.montoCobrado) || 0;
-    var finalSobrepauta = (body.sobrepauta !== undefined && body.sobrepauta !== '')
-      ? Number(body.sobrepauta)
-      : (finalMontoCobrado - finalCtaFabrica);
-
-    // AUTO-CURACIÓN Y ASIGNACIÓN DINÁMICA DE CABECERAS
-    var lastCol = Math.max(1, sheetDestino.getLastColumn());
-    var rawHeaders = [];
-    if (sheetDestino.getLastRow() >= 1) {
-      rawHeaders = sheetDestino.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) {
-        return String(h || '').trim();
-      });
-    }
-
-    // Si la hoja está completamente vacía, insertar todas las cabeceras estándar
-    if (rawHeaders.length === 0 || !rawHeaders.some(function(h) { return h.length > 0; })) {
-      rawHeaders = [
-        'N° Suscripción', 'Fecha', 'Cliente', 'Marca', 'Modelo',
-        'Tipo de Plan', 'Seña o Completa', 'Valor Cuota #1', 'Monto Cobrado',
-        'Autorizó Descuento', 'Cta. Fábrica', 'Sobrepauta', '¿Entrega Usado?',
-        'Modelo Usado', 'Año Usado', 'Valor Infoauto', 'Cotización Sugerida', 'Valor Toma',
-        'Equipo de Venta', 'Vendedor', 'Origen'
-      ];
-      sheetDestino.getRange(1, 1, 1, rawHeaders.length).setValues([rawHeaders]);
-    } else {
-      // Si la hoja ya existía, comprobar si faltan las columnas 'Cta. Fábrica' y 'Sobrepauta'
-      var hasCtaFab = false;
-      var hasSobrepauta = false;
-      var hasCotizSug = false;
-
-      for (var k = 0; k < rawHeaders.length; k++) {
-        var hNorm = rawHeaders[k].toLowerCase();
-        if (hNorm.includes('fábrica') || hNorm.includes('fabrica') || (hNorm.includes('cta') && !hNorm.includes('cuota #1'))) {
-          hasCtaFab = true;
-        }
-        if (hNorm.includes('sobrepauta')) {
-          hasSobrepauta = true;
-        }
-        if (hNorm.includes('sugerida') || hNorm.includes('cotiz')) {
-          hasCotizSug = true;
-        }
-      }
-
-      // Añadir automáticamente las columnas faltantes al final de la fila 1
-      var nextHeaderCol = rawHeaders.length + 1;
-      if (!hasCtaFab) {
-        sheetDestino.getRange(1, nextHeaderCol).setValue('Cta. Fábrica');
-        rawHeaders.push('Cta. Fábrica');
-        nextHeaderCol++;
-      }
-      if (!hasSobrepauta) {
-        sheetDestino.getRange(1, nextHeaderCol).setValue('Sobrepauta');
-        rawHeaders.push('Sobrepauta');
-        nextHeaderCol++;
-      }
-      if (!hasCotizSug) {
-        sheetDestino.getRange(1, nextHeaderCol).setValue('Cotización Sugerida');
-        rawHeaders.push('Cotización Sugerida');
-        nextHeaderCol++;
-      }
-    }
-
-    // CONSTRUIR LA FILA EXACTA SEGÚN CADA NOMBRE DE CABECERA
-    var rowToAppend = new Array(rawHeaders.length).fill('');
-    for (var colIdx = 0; colIdx < rawHeaders.length; colIdx++) {
-      var colHeader = rawHeaders[colIdx].toLowerCase();
-
-      if (colHeader.includes('suscrip')) {
-        rowToAppend[colIdx] = numSuscripcion;
-      } else if (colHeader.includes('fecha')) {
-        rowToAppend[colIdx] = body.fecha || Utilities.formatDate(new Date(), 'GMT-3', 'yyyy-MM-dd');
-      } else if (colHeader.includes('cliente')) {
-        rowToAppend[colIdx] = body.cliente || '';
-      } else if (colHeader.includes('marca')) {
-        rowToAppend[colIdx] = body.marca || '';
-      } else if (colHeader.includes('modelo') && !colHeader.includes('usado')) {
-        rowToAppend[colIdx] = body.modelo || '';
-      } else if (colHeader.includes('plan') || colHeader.includes('tipo')) {
-        rowToAppend[colIdx] = body.tipoPlan || '';
-      } else if (colHeader.includes('seña') || colHeader.includes('completa') || colHeader.includes('condic')) {
-        rowToAppend[colIdx] = body.senaOCompleta || 'Completa';
-      } else if (colHeader.includes('cuota') && !colHeader.includes('fáb') && !colHeader.includes('fab') && !colHeader.includes('cta')) {
-        rowToAppend[colIdx] = Number(body.valorCuota1) || 0;
-      } else if (colHeader.includes('cobrado') || colHeader.includes('monto')) {
-        rowToAppend[colIdx] = finalMontoCobrado;
-      } else if (colHeader.includes('autoriz')) {
-        rowToAppend[colIdx] = body.senaOCompleta === 'Descuento Aprobado' ? (body.autorizoDescuento || '') : '';
-      } else if (colHeader.includes('fábrica') || colHeader.includes('fabrica') || (colHeader.includes('cta') && !colHeader.includes('cuota #1'))) {
-        rowToAppend[colIdx] = finalCtaFabrica;
-      } else if (colHeader.includes('sobrepauta')) {
-        rowToAppend[colIdx] = finalSobrepauta;
-      } else if (colHeader.includes('entrega') || (colHeader.includes('usado') && colHeader.includes('?'))) {
-        rowToAppend[colIdx] = body.entregaUsado || 'No';
-      } else if (colHeader.includes('modelo') && colHeader.includes('usado')) {
-        rowToAppend[colIdx] = body.entregaUsado === 'Sí' ? (body.modeloUsado || '') : '';
-      } else if (colHeader.includes('año') || colHeader.includes('ano')) {
-        rowToAppend[colIdx] = body.entregaUsado === 'Sí' ? (body.anoUsado || '') : '';
-      } else if (colHeader.includes('infoauto')) {
-        rowToAppend[colIdx] = body.entregaUsado === 'Sí' ? (Number(body.valorInfoauto) || 0) : '';
-      } else if (colHeader.includes('sugerida') || colHeader.includes('cotiz')) {
-        rowToAppend[colIdx] = body.entregaUsado === 'Sí'
-          ? (Number(body.cotizacionSugerida) || Math.round((Number(body.valorInfoauto) || 0) * 0.7))
-          : '';
-      } else if (colHeader.includes('toma')) {
-        rowToAppend[colIdx] = body.entregaUsado === 'Sí' ? (Number(body.valorToma) || 0) : '';
-      } else if (colHeader.includes('equipo') || colHeader.includes('supervisor')) {
-        rowToAppend[colIdx] = body.equipoVenta || '';
-      } else if (colHeader.includes('vendedor')) {
-        rowToAppend[colIdx] = body.vendedor || '';
-      } else if (colHeader.includes('origen')) {
-        rowToAppend[colIdx] = body.origenDato || '';
-      }
-    }
-
-    sheetDestino.appendRow(rowToAppend);
-
-    const response = {
-      status: 'success',
-      numSuscripcion: numSuscripcion,
-      ctaFabrica: finalCtaFabrica,
-      sobrepauta: finalSobrepauta,
-      message: 'Venta registrada exitosamente con suscripción ' + numSuscripcion + ' (Cta. Fábrica: ' + finalCtaFabrica + ', Sobrepauta: ' + finalSobrepauta + ')',
-      rowNumber: sheetDestino.getLastRow()
-    };
-
-    return ContentService
-      .createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } finally {
-    lock.releaseLock();
-  }
+    const pricing = getUsadoPricing(ss);
+    const infoauto = numberValue(body.valorInfoauto, 0);
+    const descuento = numberValue(body.anoUsado, 0) <= pricing.anioCorte ? pricing.descuentoHastaCorte : pricing.descuentoDesdeCorte;
+    const cuotaFabrica = numberValue(body.ctaFabrica, numberValue(body.valorCuota1, 0));
+    const payload = Object.assign({}, body, {
+      numSuscripcion: numSuscripcion, ctaFabrica: cuotaFabrica,
+      sobrepauta: numberValue(body.montoCobrado, 0) - cuotaFabrica,
+      cotizacionSugerida: body.entregaUsado === 'Sí' ? Math.round(infoauto * (1 - descuento)) : '',
+      timestamp: Date.now()
+    });
+    const row = destination.headers.map(function(header) {
+      const field = fieldForHeader(header);
+      return field ? (payload[field] === undefined ? '' : payload[field]) : '';
+    });
+    destination.sheet.appendRow(row);
+    return jsonResponse({ status: 'success', numSuscripcion: numSuscripcion, message: 'Venta registrada en Google Sheets.' });
+  } catch (error) { return jsonResponse({ status: 'error', message: String(error) });
+  } finally { lock.releaseLock(); }
 }
 `;
