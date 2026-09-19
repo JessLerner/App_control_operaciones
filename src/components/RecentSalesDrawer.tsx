@@ -12,6 +12,52 @@ import {
 import { VentaRecord } from '../types';
 import { formatCurrency, formatDateLegible } from '../utils/formatters';
 
+const excelEscape = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+const crc32 = (data: Uint8Array) => {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+// XLSX es un archivo ZIP de documentos XML. Este generador compacto evita que
+// Excel interprete los acentos y los separadores según la configuración regional.
+const createXlsx = (rows: unknown[][]) => {
+  const encoder = new TextEncoder();
+  const sheetRows = rows.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, columnIndex) => {
+    const ref = `${String.fromCharCode(65 + columnIndex)}${rowIndex + 1}`;
+    return `<c r="${ref}" t="inlineStr"><is><t>${excelEscape(value)}</t></is></c>`;
+  }).join('')}</row>`).join('');
+  const files: Array<[string, string]> = [
+    ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'],
+    ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Ventas" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/worksheets/sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><sheetData>${sheetRows}</sheetData><cols>${rows[0].map((_, index) => `<col min="${index + 1}" max="${index + 1}" width="18" customWidth="1"/>`).join('')}</cols></worksheet>`],
+  ];
+  const chunks: Uint8Array[] = [];
+  const directory: Uint8Array[] = [];
+  let offset = 0;
+  for (const [name, content] of files) {
+    const nameBytes = encoder.encode(name); const contentBytes = encoder.encode(content); const crc = crc32(contentBytes);
+    const header = new Uint8Array(30 + nameBytes.length); const view = new DataView(header.buffer);
+    view.setUint32(0, 0x04034b50, true); view.setUint16(4, 20, true); view.setUint32(14, crc, true); view.setUint32(18, contentBytes.length, true); view.setUint32(22, contentBytes.length, true); view.setUint16(26, nameBytes.length, true); header.set(nameBytes, 30);
+    chunks.push(header, contentBytes);
+    const entry = new Uint8Array(46 + nameBytes.length); const entryView = new DataView(entry.buffer);
+    entryView.setUint32(0, 0x02014b50, true); entryView.setUint16(4, 20, true); entryView.setUint16(6, 20, true); entryView.setUint32(16, crc, true); entryView.setUint32(20, contentBytes.length, true); entryView.setUint32(24, contentBytes.length, true); entryView.setUint16(28, nameBytes.length, true); entryView.setUint32(42, offset, true); entry.set(nameBytes, 46);
+    directory.push(entry); offset += header.length + contentBytes.length;
+  }
+  const directorySize = directory.reduce((total, entry) => total + entry.length, 0);
+  const end = new Uint8Array(22); const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true); endView.setUint16(8, files.length, true); endView.setUint16(10, files.length, true); endView.setUint32(12, directorySize, true); endView.setUint32(16, offset, true);
+  return new Blob([...chunks, ...directory, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
 interface RecentSalesDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -53,8 +99,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
 
   const pendingSales = sales.filter((s) => s.syncStatus !== 'synced');
 
-  const buildCSV = (records: VentaRecord[]) => {
-
+  const buildReportRows = (records: VentaRecord[]) => {
     const headers = [
       'N° Suscripción (PK)',
       'Fecha',
@@ -81,53 +126,60 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
     ];
 
     const rows = records.map((s) => [
-      `"${s.numSuscripcion}"`,
-      `"${s.fecha}"`,
-      `"${s.cliente.replace(/"/g, '""')}"`,
-      `"${s.marca}"`,
-      `"${s.modelo.replace(/"/g, '""')}"`,
-      `"${s.tipoPlan}"`,
-      `"${s.senaOCompleta}"`,
-      `"${(s.autorizoDescuento || '').replace(/"/g, '""')}"`,
+      s.numSuscripcion,
+      s.fecha,
+      s.cliente,
+      s.marca,
+      s.modelo,
+      s.tipoPlan,
+      s.senaOCompleta,
+      s.autorizoDescuento || '',
       s.valorCuota1 || 0,
       s.ctaFabrica !== undefined ? s.ctaFabrica : (s.valorCuota1 || 0),
       s.montoCobrado || 0,
       s.sobrepauta !== undefined ? s.sobrepauta : (s.montoCobrado || 0) - (s.ctaFabrica || s.valorCuota1 || 0),
-      `"${s.entregaUsado}"`,
-      `"${(s.modeloUsado || '').replace(/"/g, '""')}"`,
+      s.entregaUsado,
+      s.modeloUsado || '',
       s.anoUsado || '',
       s.valorInfoauto || '',
       s.cotizacionSugerida || (s.valorInfoauto ? Math.round(Number(s.valorInfoauto) * 0.7) : ''),
       s.valorToma || '',
-      `"${s.equipoVenta}"`,
-      `"${s.vendedor}"`,
-      `"${s.origenDato}"`,
-      `"${s.syncStatus}"`,
+      s.equipoVenta,
+      s.vendedor,
+      s.origenDato,
+      s.syncStatus,
     ]);
 
-    return [headers.join(';'), ...rows.map((e) => e.join(';'))].join('\n');
+    return [headers, ...rows];
+  };
+
+  const buildCSV = (records: VentaRecord[]) => buildReportRows(records)
+    .map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+
+  const downloadFile = (blob: Blob, fileName: string) => {
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href; link.download = fileName;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    URL.revokeObjectURL(href);
   };
 
   const exportToCSV = () => {
     if (reportSales.length === 0) return;
-    const blob = new Blob(['\uFEFF' + buildCSV(reportSales)], { type: 'text/csv;charset=utf-8' });
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', href);
-    link.setAttribute(
-      'download',
-      `parte_diario_ventas_${reportPeriod === 'day' ? new Date().toISOString().slice(0, 10) : new Date().toISOString().slice(0, 7)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(href);
+    downloadFile(new Blob(['\uFEFF' + buildCSV(reportSales)], { type: 'text/csv;charset=utf-8' }), `parte_diario_ventas_${reportPeriod === 'day' ? new Date().toISOString().slice(0, 10) : new Date().toISOString().slice(0, 7)}.csv`);
+  };
+
+  const exportToExcel = () => {
+    if (reportSales.length === 0) return;
+    const period = reportPeriod === 'day' ? new Date().toISOString().slice(0, 10) : new Date().toISOString().slice(0, 7);
+    downloadFile(createXlsx(buildReportRows(reportSales)), `parte_diario_ventas_${period}.xlsx`);
   };
 
   const openEmail = () => {
     const periodLabel = reportPeriod === 'day' ? 'del día' : 'del mes';
     const subject = `Parte diario de ventas ${periodLabel}`;
-    const body = `Adjunto el reporte de ventas ${periodLabel}.\n\nOperaciones: ${reportSales.length}\n\nEl archivo CSV se descarga desde la app para adjuntarlo a este correo.`;
+    const body = `Adjunto el reporte de ventas ${periodLabel}.\n\nOperaciones: ${reportSales.length}\n\nEl archivo Excel se descarga desde la app para adjuntarlo a este correo.`;
     window.location.href = `mailto:${encodeURIComponent(reportEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
@@ -198,8 +250,9 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
           <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-200">Enviar reporte</span><span className="text-[10px] text-slate-500">{reportSales.length} venta(s)</span></div>
           <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setReportPeriod('day')} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${reportPeriod === 'day' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'}`}>Día</button><button type="button" onClick={() => setReportPeriod('month')} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${reportPeriod === 'month' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'}`}>Mes</button></div>
           <input value={reportEmail} onChange={(event) => setReportEmail(event.target.value)} type="email" placeholder="Destinatario (opcional)" className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs" />
-          <div className="grid grid-cols-2 gap-2"><button type="button" disabled={!reportSales.length} onClick={exportToCSV} id="btn-exportar-csv" className="flex items-center justify-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-semibold text-slate-200 disabled:opacity-40"><Download className="h-3.5 w-3.5" />Descargar CSV</button><button type="button" disabled={!reportSales.length} onClick={openEmail} className="flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-40"><Mail className="h-3.5 w-3.5" />Abrir correo</button></div>
-          <p className="text-[10px] leading-relaxed text-slate-500">Descargá el CSV y adjuntalo al correo que se abre preparado.</p>
+          <button type="button" disabled={!reportSales.length} onClick={exportToExcel} id="btn-exportar-excel" className="flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-40"><Download className="h-3.5 w-3.5" />Descargar Excel (.xlsx)</button>
+          <div className="grid grid-cols-2 gap-2"><button type="button" disabled={!reportSales.length} onClick={exportToCSV} id="btn-exportar-csv" className="flex items-center justify-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-xs font-semibold text-slate-200 disabled:opacity-40"><Download className="h-3.5 w-3.5" />CSV alternativo</button><button type="button" disabled={!reportSales.length} onClick={openEmail} className="flex items-center justify-center gap-1 rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-slate-200 disabled:opacity-40"><Mail className="h-3.5 w-3.5" />Abrir correo</button></div>
+          <p className="text-[10px] leading-relaxed text-slate-500">Recomendado: descargá el Excel y adjuntalo al correo que se abre preparado.</p>
         </div>
 
         {/* List of Sales */}
