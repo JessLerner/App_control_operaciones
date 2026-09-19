@@ -17,6 +17,7 @@ import {
   getStoredReferenceData,
   saveStoredReferenceData,
   getSalesHistory,
+  fetchRemoteReferenceData,
   submitVentaRecord,
   syncPendingSales,
 } from './services/sheetsService';
@@ -60,6 +61,25 @@ export default function App() {
   useEffect(() => {
     setSalesHistory(getSalesHistory());
   }, []);
+
+  // En cada instalación, usar los datos remotos más recientes sin depender de una acción manual.
+  // Si la red no está disponible, se conserva el catálogo guardado en el dispositivo.
+  useEffect(() => {
+    if (!config.webAppUrl) return;
+
+    let isCurrent = true;
+    fetchRemoteReferenceData(config.webAppUrl).then((result) => {
+      if (isCurrent && result.success && result.data) {
+        setReferenceData(result.data);
+      } else if (isCurrent && !result.success) {
+        console.warn('No se pudo actualizar el catálogo remoto:', result.error);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [config.webAppUrl]);
 
   // Calculate today's sales
   const todayStr = getTodayDateString();

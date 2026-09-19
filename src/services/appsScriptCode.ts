@@ -191,7 +191,16 @@ function doGet(e) {
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
-  lock.tryLock(10000);
+  const lockAcquired = lock.tryLock(10000);
+
+  if (!lockAcquired) {
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        status: 'error',
+        message: 'No se pudo bloquear la planilla. Reintentá la carga en unos segundos.'
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   
   try {
     const rawData = e.postData ? e.postData.contents : '';

@@ -7,15 +7,27 @@ const STORAGE_KEYS = {
   SALES_HISTORY: 'pdv_sales_history_v1',
 };
 
+// URL publicada para que una instalación nueva quede conectada sin configuración manual.
+// Puede reemplazarse por VITE_GOOGLE_APPS_SCRIPT_URL al compilar la app.
+export const DEFAULT_WEB_APP_URL =
+  import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
+  'https://script.google.com/macros/s/AKfycbzKh9PhBkGd4u4Xpdg2iuezywSun6Kk6E5E0KarsMBhsRewxstt53qCpjx04QHZy6Px/exec';
+
 export const DEFAULT_CONFIG: SheetsConfig = {
-  webAppUrl: '',
+  webAppUrl: DEFAULT_WEB_APP_URL,
   sheetNameDestino: 'ID Ventas',
 };
 
 export function getStoredConfig(): SheetsConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CONFIG);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SheetsConfig>;
+      return {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+      };
+    }
   } catch (e) {
     console.error('Error leyendo config local:', e);
   }
@@ -327,19 +339,12 @@ export async function submitVentaRecord(
     try {
       json = JSON.parse(text);
     } catch {
-      if (res.ok) {
-        json = { status: 'success' };
-      }
+      // Un HTTP 200 no confirma una escritura: Apps Script puede responder errores con 200.
+      json = {};
     }
 
-    const isDuplicateOrAlreadyInSheet =
-      Boolean(json.message && (
-        json.message.toLowerCase().includes('duplicad') ||
-        json.message.toLowerCase().includes('ya existe')
-      ));
-
-    // CASO A: Envío exitoso o la Primary Key ya está registrada en Google Sheets
-    if (json.status === 'success' || res.ok || isDuplicateOrAlreadyInSheet) {
+    // Solo una confirmación explícita del backend permite marcar la venta como sincronizada.
+    if (res.ok && json.status === 'success') {
       record.syncStatus = 'synced';
       record.errorMessage = undefined;
       const updatedHistory = getSalesHistory().map((item) =>
@@ -360,12 +365,10 @@ export async function submitVentaRecord(
         success: true,
         numSuscripcion,
         syncedToRemote: true,
-        message: isDuplicateOrAlreadyInSheet
-          ? `¡Venta #${numSuscripcion} confirmada y registrada en Google Sheets! (Clave ya presente en la planilla)`
-          : `¡Venta #${numSuscripcion} registrada y guardada exitosamente en Google Sheets!`,
+        message: `¡Venta #${numSuscripcion} registrada y guardada exitosamente en Google Sheets!`,
       };
     } else {
-      // Si la respuesta fue un error distinto a duplicado, verificar si realmente se insertó en Sheets
+      // Ante una respuesta ambigua o de error, comprobar el origen antes de dejarla pendiente.
       const isActuallyInSheet = await verifySubscriptionInRemoteSheets(numSuscripcion);
       if (isActuallyInSheet) {
         return {
