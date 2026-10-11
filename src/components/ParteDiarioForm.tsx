@@ -63,7 +63,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   const [ctaFabrica, setCtaFabrica] = useState<number | ''>(
     initialValues?.ctaFabrica !== undefined ? initialValues.ctaFabrica : ''
   );
-  const [valorAuto, setValorAuto] = useState<number | ''>(initialValues?.valorAuto ?? '');
   const [montoCobrado, setMontoCobrado] = useState<number | ''>(initialValues?.montoCobrado || '');
   const [debitoAutomatico, setDebitoAutomatico] = useState<RespuestaSiNo | ''>(
     initialValues?.debitoAutomatico || ''
@@ -180,16 +179,13 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
             ? match.ctaFabrica
             : match.valorCuota1;
         setCtaFabrica(factoryCuota || '');
-        setValorAuto(match.valorAuto && match.valorAuto > 0 ? match.valorAuto : '');
       } else {
         setValorCuota1('');
         setCtaFabrica('');
-        setValorAuto('');
       }
     } else {
       setValorCuota1('');
       setCtaFabrica('');
-      setValorAuto('');
     }
   }, [marca, modelo, tipoPlan, referenceData.modelosYPrecios]);
 
@@ -229,7 +225,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setTipoPlan('');
     setValorCuota1('');
     setCtaFabrica('');
-    setValorAuto('');
     markTouched('marca');
   };
 
@@ -240,7 +235,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setTipoPlan('');
     setValorCuota1('');
     setCtaFabrica('');
-    setValorAuto('');
     markTouched('modelo');
   };
 
@@ -284,7 +278,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     if (!modelo) errors.push('Modelo');
     if (!tipoPlan) errors.push('Tipo de Plan');
     if (valorCuota1 === '' || valorCuota1 <= 0) errors.push('Valor Cuota #1 (requiere Marca, Modelo y Plan)');
-    if (valorAuto === '' || valorAuto <= 0) errors.push('Valor del auto (requiere Marca, Modelo y Plan)');
     if (montoCobrado === '' || montoCobrado <= 0) errors.push('Monto Cobrado');
     if (!debitoAutomatico) errors.push('Débito automático');
 
@@ -320,7 +313,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     modelo,
     tipoPlan,
     valorCuota1,
-    valorAuto,
     montoCobrado,
     debitoAutomatico,
     isMontoCobradoMenorACuota,
@@ -383,7 +375,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       senaOCompleta,
       autorizoDescuento: finalAutorizador,
       valorCuota1: typeof valorCuota1 === 'number' ? valorCuota1 : 0,
-      valorAuto: typeof valorAuto === 'number' ? valorAuto : 0,
       ctaFabrica: resolvedCtaFabrica,
       sobrepauta: resolvedSobrepauta,
       montoCobrado: finalMontoCobrado,
@@ -635,34 +626,6 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
               {valorCuota1 !== ''
                 ? 'Valor oficial fijado automáticamente por lista de precios.'
                 : 'Selecciona Marca, Modelo y Plan para cargar el valor.'}
-            </p>
-          </div>
-
-          {/* Valor del auto (Automático de Modelos_y_Precios) */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <DollarSign className="h-3.5 w-3.5 text-blue-400" />
-                Valor del auto (Catálogo)
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
-                <Lock className="h-2.5 w-2.5 text-slate-400" /> Solo lectura
-              </span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">$</span>
-              <input
-                type="text"
-                id="input-valor-auto"
-                value={formatNumberWithThousands(valorAuto)}
-                readOnly
-                disabled
-                placeholder="Automático según Plan"
-                className="w-full rounded-xl border border-slate-700/60 bg-slate-950/70 pl-8 pr-3.5 py-2.5 text-sm font-bold font-mono text-slate-200 cursor-not-allowed select-none"
-              />
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              {valorAuto !== '' ? 'Precio cargado desde Modelos_y_Precios.' : 'Selecciona Marca, Modelo y Plan para cargar el valor.'}
             </p>
           </div>
 
