@@ -55,7 +55,10 @@ const createXlsx = (rows: unknown[][]) => {
   const directorySize = directory.reduce((total, entry) => total + entry.length, 0);
   const end = new Uint8Array(22); const endView = new DataView(end.buffer);
   endView.setUint32(0, 0x06054b50, true); endView.setUint16(8, files.length, true); endView.setUint16(10, files.length, true); endView.setUint32(12, directorySize, true); endView.setUint32(16, offset, true);
-  return new Blob([...chunks, ...directory, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const blobParts: BlobPart[] = [...chunks, ...directory, end].map((chunk) =>
+    chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer
+  );
+  return new Blob(blobParts, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 };
 
 interface RecentSalesDrawerProps {
@@ -113,12 +116,14 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       'Cta. Fábrica',
       'Monto Cobrado',
       'Sobrepauta',
+      'Valor del auto',
       'Entrega Usado',
       'Modelo Usado',
       'Año Usado',
       'Valor Infoauto',
       'Cotización Sugerida',
       'Valor Toma',
+      'Débito automático',
       'Equipo de Venta',
       'Vendedor',
       'Origen',
@@ -138,12 +143,14 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       s.ctaFabrica !== undefined ? s.ctaFabrica : (s.valorCuota1 || 0),
       s.montoCobrado || 0,
       s.sobrepauta !== undefined ? s.sobrepauta : (s.montoCobrado || 0) - (s.ctaFabrica || s.valorCuota1 || 0),
+      s.valorAuto || '',
       s.entregaUsado,
       s.modeloUsado || '',
       s.anoUsado || '',
       s.valorInfoauto || '',
       s.cotizacionSugerida || (s.valorInfoauto ? Math.round(Number(s.valorInfoauto) * 0.7) : ''),
       s.valorToma || '',
+      s.debitoAutomatico || '',
       s.equipoVenta,
       s.vendedor,
       s.origenDato,

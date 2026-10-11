@@ -12,6 +12,7 @@ export interface ModeloPlanItem {
   tipoPlan: string; // ej: "100%", "80/20", "70/30"
   valorCuota1: number; // Valor sugerido
   ctaFabrica?: number; // Cta. Fábrica oficial
+  valorAuto?: number; // Valor del vehículo
 }
 
 export interface EquipoVenta {
@@ -37,6 +38,7 @@ export interface UsadoPricingConfig {
 
 export type SenaOCompleta = 'Completa' | 'Seña' | 'Descuento Aprobado';
 export type EntregaUsado = 'Sí' | 'No';
+export type RespuestaSiNo = 'Sí' | 'No';
 
 export const AUTORIZADORES_DESCUENTO = [
   'Matias Gonzalez',
@@ -67,6 +69,8 @@ export interface VentaFormData {
   anoUsado?: number | '';
   valorInfoauto?: number | '';
   cotizacionSugerida?: number | '';
+  valorAuto?: number | '';
+  debitoAutomatico?: RespuestaSiNo;
   valorToma?: number | '';
   equipoVenta: string;
   vendedor: string;
