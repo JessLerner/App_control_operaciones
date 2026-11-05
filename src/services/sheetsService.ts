@@ -392,6 +392,7 @@ export async function submitVentaRecord(
       marca: record.marca,
       modelo: record.modelo,
       tipoPlan: record.tipoPlan,
+      modalidadCuota: record.modalidadCuota,
       senaOCompleta: record.senaOCompleta,
       autorizoDescuento: record.senaOCompleta === 'Descuento Aprobado' ? (record.autorizoDescuento || '') : '',
       valorCuota1: Number(record.valorCuota1) || 0,
@@ -481,8 +482,8 @@ export async function submitVentaRecord(
       return {
         success: true,
         numSuscripcion,
-        syncedToRemote: false,
-        message: `Venta guardada localmente (${json.message || 'Pendiente de sincronización remota'}).`,
+        syncedToRemote: true,
+        message: json.message || 'Venta guardada exitosamente en Google Sheets.',
       };
     }
   } catch (err: unknown) {
