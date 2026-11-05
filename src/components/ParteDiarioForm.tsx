@@ -26,6 +26,7 @@ import {
   EntregaUsado,
   RespuestaSiNo,
   AUTORIZADORES_DESCUENTO,
+  ModeloPlanItem,
 } from '../types';
 import { MARCAS_DISPONIBLES } from '../data/initialReferenceData';
 import {
@@ -43,6 +44,18 @@ interface ParteDiarioFormProps {
   initialValues?: Partial<VentaFormData>;
 }
 
+const getVehicleLabel = (item: Pick<ModeloPlanItem, 'vehiculo' | 'modelo'>) =>
+  item.vehiculo?.trim() || item.modelo.trim().split(/\s+/)[0] || '';
+const getVehicleKey = (item: Pick<ModeloPlanItem, 'vehiculo' | 'modelo'>) =>
+  getVehicleLabel(item).toLocaleLowerCase();
+
+interface ModeloYPlanOption {
+  key: string;
+  label: string;
+  modelo: string;
+  tipoPlan: string;
+}
+
 export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   referenceData,
   onSubmit,
@@ -54,6 +67,9 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   const [cliente, setCliente] = useState<string>(initialValues?.cliente || '');
   const [numSuscripcion, setNumSuscripcion] = useState<string>(initialValues?.numSuscripcion || '');
   const [marca, setMarca] = useState<MarcaAuto | ''>(initialValues?.marca || '');
+  const [vehiculo, setVehiculo] = useState<string>(
+    getVehicleKey({ modelo: initialValues?.modelo || '' })
+  );
   const [modelo, setModelo] = useState<string>(initialValues?.modelo || '');
   const [tipoPlan, setTipoPlan] = useState<string>(initialValues?.tipoPlan || '');
   
@@ -135,29 +151,49 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     return checkSubscriptionExists(numSuscripcion.trim());
   }, [numSuscripcion]);
 
-  // 1. Filtrado de Modelos según Marca seleccionada
-  const availableModelos = useMemo(() => {
+  // El primer selector muestra sólo el vehículo base. Las versiones y los planes
+  // se eligen juntos después, sin alterar los valores originales del catálogo.
+  const availableVehiculos = useMemo(() => {
     if (!marca) return [];
-    const modelsSet = new Set<string>();
+    const vehiclesByKey = new Map<string, string>();
     referenceData.modelosYPrecios
       .filter((item) => item.marca.toUpperCase() === marca.toUpperCase())
-      .forEach((item) => modelsSet.add(item.modelo));
-    return Array.from(modelsSet).sort();
+      .forEach((item) => {
+        const nombreOriginal = getVehicleLabel(item);
+        const key = getVehicleKey(item);
+        if (nombreOriginal && !vehiclesByKey.has(key)) {
+          vehiclesByKey.set(key, nombreOriginal);
+        }
+      });
+    return Array.from(vehiclesByKey.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [marca, referenceData.modelosYPrecios]);
 
-  // 2. Filtrado de Tipos de Plan según Marca y Modelo seleccionados
-  const availablePlanes = useMemo(() => {
-    if (!marca || !modelo) return [];
-    const planesSet = new Set<string>();
-    referenceData.modelosYPrecios
+  const availableModelosYPlanes = useMemo<ModeloYPlanOption[]>(() => {
+    if (!marca || !vehiculo) return [];
+    return referenceData.modelosYPrecios
       .filter(
         (item) =>
           item.marca.toUpperCase() === marca.toUpperCase() &&
-          item.modelo.toLowerCase() === modelo.toLowerCase()
+          getVehicleKey(item) === vehiculo
       )
-      .forEach((item) => planesSet.add(item.tipoPlan));
-    return Array.from(planesSet);
-  }, [marca, modelo, referenceData.modelosYPrecios]);
+      .map((item) => {
+        const modeloOriginal = item.modelo.trim();
+        const tipoPlanOriginal = item.tipoPlan.trim();
+        const vehiculoOriginal = getVehicleLabel(item);
+        const version = modeloOriginal.toLocaleLowerCase().startsWith(vehiculoOriginal.toLocaleLowerCase())
+          ? modeloOriginal.slice(vehiculoOriginal.length).trim()
+          : modeloOriginal;
+        return {
+          key: `${modeloOriginal}\u0000${tipoPlanOriginal}`,
+          label: version ? `${version} · ${tipoPlanOriginal}` : tipoPlanOriginal,
+          modelo: modeloOriginal,
+          tipoPlan: tipoPlanOriginal,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [marca, vehiculo, referenceData.modelosYPrecios]);
 
   // 3. Autocompletado dinámico de 'Valor Cuota #1' y 'Cta. Fábrica' (100% Automático de tabla, Solo Lectura)
   useEffect(() => {
@@ -221,6 +257,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   const handleMarcaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newMarca = e.target.value as MarcaAuto;
     setMarca(newMarca);
+    setVehiculo('');
     setModelo('');
     setTipoPlan('');
     setValorCuota1('');
@@ -228,19 +265,20 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     markTouched('marca');
   };
 
-  // Manejo de cascada al cambiar Modelo
-  const handleModeloChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newModelo = e.target.value;
-    setModelo(newModelo);
+  const handleVehiculoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setVehiculo(e.target.value);
+    setModelo('');
     setTipoPlan('');
     setValorCuota1('');
     setCtaFabrica('');
-    markTouched('modelo');
+    markTouched('vehiculo');
   };
 
-  // Manejo de cambio de Tipo de Plan
-  const handleTipoPlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setTipoPlan(e.target.value);
+  const handleModeloYPlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = availableModelosYPlanes.find((option) => option.key === e.target.value);
+    setModelo(selected?.modelo || '');
+    setTipoPlan(selected?.tipoPlan || '');
+    markTouched('modelo');
     markTouched('tipoPlan');
   };
 
@@ -521,71 +559,71 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
             </select>
           </div>
 
-          {/* 5. Modelo (Dependiente de Marca) */}
+          {/* 5. Vehículo base (Dependiente de Marca) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-              <span>5. Modelo *</span>
+              <span>5. Vehículo *</span>
               {marca && (
                 <span className="text-[10px] text-emerald-400 font-normal">
-                  {availableModelos.length} opciones
+                  {availableVehiculos.length} opciones
                 </span>
               )}
             </label>
             <select
-              id="select-modelo"
-              value={modelo}
+              id="select-vehiculo"
+              value={vehiculo}
               disabled={!marca}
-              onChange={handleModeloChange}
+              onChange={handleVehiculoChange}
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm focus:outline-none focus:ring-1 transition ${
                 !marca
                   ? 'border-slate-800 bg-slate-900/50 text-slate-600 cursor-not-allowed'
-                  : !modelo
+                  : !vehiculo
                   ? 'border-slate-700 bg-slate-800/90 text-slate-400'
                   : 'border-emerald-500/60 bg-slate-800 text-white font-medium focus:ring-emerald-500'
               }`}
               required
             >
               <option value="">
-                {!marca ? 'Primero elija Marca' : '-- Seleccionar Modelo --'}
+                {!marca ? 'Primero elija Marca' : '-- Seleccionar Vehículo --'}
               </option>
-              {availableModelos.map((mod) => (
-                <option key={mod} value={mod} className="bg-slate-900 text-white">
-                  {mod}
+              {availableVehiculos.map((vehicle) => (
+                <option key={vehicle.key} value={vehicle.key} className="bg-slate-900 text-white">
+                  {vehicle.label}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* 6. Tipo de Plan (Dependiente de Modelo) */}
+          {/* 6. Versión y plan (Dependiente del vehículo) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-              <span>6. Tipo de Plan *</span>
-              {modelo && (
+              <span>6. Modelo y Tipo de Plan *</span>
+              {vehiculo && (
                 <span className="text-[10px] text-emerald-400 font-normal">
-                  {availablePlanes.join(' | ')}
+                  {availableModelosYPlanes.length} opciones
                 </span>
               )}
             </label>
             <select
-              id="select-tipo-plan"
-              value={tipoPlan}
-              disabled={!modelo}
-              onChange={handleTipoPlanChange}
+              id="select-modelo-plan"
+              value={modelo && tipoPlan ? `${modelo.trim()}\u0000${tipoPlan.trim()}` : ''}
+              disabled={!vehiculo}
+              onChange={handleModeloYPlanChange}
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm focus:outline-none focus:ring-1 transition ${
-                !modelo
+                !vehiculo
                   ? 'border-slate-800 bg-slate-900/50 text-slate-600 cursor-not-allowed'
-                  : !tipoPlan
+                  : !modelo || !tipoPlan
                   ? 'border-slate-700 bg-slate-800/90 text-slate-400'
                   : 'border-emerald-500/60 bg-slate-800 text-white font-semibold focus:ring-emerald-500'
               }`}
               required
             >
               <option value="">
-                {!modelo ? 'Primero elija Modelo' : '-- Seleccionar Tipo de Plan --'}
+                {!vehiculo ? 'Primero elija Vehículo' : '-- Seleccionar Modelo y Plan --'}
               </option>
-              {availablePlanes.map((plan) => (
-                <option key={plan} value={plan} className="bg-slate-900 text-white">
-                  {plan}
+              {availableModelosYPlanes.map((option) => (
+                <option key={option.key} value={option.key} className="bg-slate-900 text-white">
+                  {option.label}
                 </option>
               ))}
             </select>

@@ -8,6 +8,8 @@ export type MarcaAuto =
 
 export interface ModeloPlanItem {
   marca: MarcaAuto;
+  // Campo de agrupación que llega desde Modelos_y_Precios. No se deduce en el formulario.
+  vehiculo?: string;
   modelo: string;
   tipoPlan: string; // ej: "100%", "80/20", "70/30"
   valorCuota1: number; // Valor sugerido

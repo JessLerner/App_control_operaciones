@@ -98,15 +98,22 @@ function getModelos(ss) {
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
   const marca = headerIndex(headers, ['Marca']);
+  const vehiculo = headerIndex(headers, ['Vehículo', 'Vehiculo', 'Auto']);
   const modelo = headerIndex(headers, ['Modelo']);
   const plan = headerIndex(headers, ['Tipo de Plan', 'Plan', 'Tipo']);
   const cuota = headerIndex(headers, ['Valor Cuota #1', 'Cuota #1', 'Cuota', 'Valor']);
   const fabrica = headerIndex(headers, ['Cta. Fábrica', 'Cta Fabrica', 'Fábrica', 'Fabrica']);
   return values.slice(1).map(function(row) {
     const cuota1 = numberValue(row[cuota >= 0 ? cuota : 3], 0);
+    const modeloNombre = String(row[modelo >= 0 ? modelo : 1] || '').trim();
+    // Vehículo es la agrupación que controla el Parte Diario. Si la columna aún
+    // no existe, se conserva compatibilidad usando la primera palabra del modelo.
+    const vehiculoNombre = String(row[vehiculo >= 0 ? vehiculo : -1] || '').trim()
+      || modeloNombre.split(/\s+/)[0] || '';
     return {
       marca: String(row[marca >= 0 ? marca : 0] || '').trim().toUpperCase(),
-      modelo: String(row[modelo >= 0 ? modelo : 1] || '').trim(),
+      vehiculo: vehiculoNombre,
+      modelo: modeloNombre,
       tipoPlan: String(row[plan >= 0 ? plan : 2] || '').trim(),
       valorCuota1: cuota1,
       ctaFabrica: numberValue(row[fabrica >= 0 ? fabrica : cuota], cuota1)
