@@ -464,27 +464,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">7. Modalidad de cuota *</label>
-            <select
-              id="select-modalidad-cuota"
-              value={modalidadCuota}
-              disabled={!selectedCatalogItem}
-              onChange={(e) => {
-                setModalidadCuota(e.target.value as ModalidadCuota | '');
-                setMontoCobrado('');
-                markTouched('modalidadCuota');
-              }}
-              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
-              required
-            >
-              <option value="">{!selectedCatalogItem ? 'Primero elija Modelo y Plan' : '-- Elegir modalidad --'}</option>
-              <option value="Normal">Normal</option>
-              <option value="Ultra" disabled={!ultraDisponible}>Ultra{!ultraDisponible ? ' (no disponible)' : ''}</option>
-            </select>
-            <p className="mt-1 text-[11px] text-slate-400">Define el valor oficial de la cuota #1.</p>
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {/* 1. Fecha */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
@@ -673,8 +653,28 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
         {/* Separador sutil */}
         <div className="my-4 border-t border-slate-800/80" />
 
-        {/* 8, 9, 7: Valores Financieros y Condición de Suscripción (Sin impacto visual de Cta. Fábrica / Sobrepauta) */}
+        {/* 7, 8 y 9: modalidad, valores financieros y cobro */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">7. Modalidad de cuota *</label>
+            <select
+              id="select-modalidad-cuota"
+              value={modalidadCuota}
+              disabled={!selectedCatalogItem}
+              onChange={(e) => {
+                setModalidadCuota(e.target.value as ModalidadCuota | '');
+                setMontoCobrado('');
+                markTouched('modalidadCuota');
+              }}
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+              required
+            >
+              <option value="">{!selectedCatalogItem ? 'Primero elija Modelo y Plan' : '-- Elegir modalidad --'}</option>
+              <option value="Normal">Normal</option>
+              <option value="Ultra" disabled={!ultraDisponible}>Ultra{!ultraDisponible ? ' (no disponible)' : ''}</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">Define el valor oficial de la cuota #1.</p>
+          </div>
           {/* 8. Valor Cuota #1 (100% Automático de catálogo - Solo Lectura) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
@@ -752,7 +752,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
           </div>
 
           {/* 10. Seña, Completa o Descuento Aprobado (Lógica Condicional de Montos) */}
-          <div>
+          <div className="sm:col-span-3">
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
               <span>10. Seña o Completa *</span>
               {!isMontoCobradoMenorACuota && typeof valorCuota1 === 'number' && valorCuota1 > 0 && typeof montoCobrado === 'number' && montoCobrado >= valorCuota1 ? (
