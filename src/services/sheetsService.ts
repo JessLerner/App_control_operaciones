@@ -150,7 +150,7 @@ function mapRemoteSale(raw: Record<string, unknown>): VentaRecord | null {
   return {
     fecha: String(raw.fecha || ''), cliente: String(raw.cliente || ''), numSuscripcion,
     marca: String(raw.marca || '') as VentaRecord['marca'], modelo: String(raw.modelo || ''),
-    tipoPlan: String(raw.tipoPlan || ''), senaOCompleta: (String(raw.senaOCompleta || 'Completa') as VentaRecord['senaOCompleta']),
+    tipoPlan: String(raw.tipoPlan || ''), modalidadCuota: String(raw.modalidadCuota || 'Normal') === 'Ultra' ? 'Ultra' : 'Normal', senaOCompleta: (String(raw.senaOCompleta || 'Completa') as VentaRecord['senaOCompleta']),
     autorizoDescuento: String(raw.autorizoDescuento || ''), valorCuota1: numberValue(raw.valorCuota1),
     valorAuto: numberValue(raw.valorAuto), debitoAutomatico: String(raw.debitoAutomatico || '') === 'Sí' ? 'Sí' : String(raw.debitoAutomatico || '') === 'No' ? 'No' : undefined,
     ctaFabrica: numberValue(raw.ctaFabrica), sobrepauta: numberValue(raw.sobrepauta),

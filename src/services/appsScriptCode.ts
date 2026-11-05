@@ -11,7 +11,7 @@ const SHEETS = {
 };
 
 const HEADERS = [
-  'N° Suscripción', 'Fecha', 'Cliente', 'Marca', 'Modelo', 'Tipo de Plan',
+  'N° Suscripción', 'Fecha', 'Cliente', 'Marca', 'Modelo', 'Tipo de Plan', 'Normal/Ultra',
   'Seña o Completa', 'Valor Cuota #1', 'Monto Cobrado', 'Autorizó Descuento',
   'Cta. Fábrica', 'Sobrepauta', '¿Entrega Usado?', 'Modelo Usado', 'Año Usado',
   'Valor Infoauto', 'Cotización Sugerida', 'Valor Toma', 'Equipo de Venta',
@@ -101,10 +101,11 @@ function getModelos(ss) {
   const vehiculo = headerIndex(headers, ['Vehículo', 'Vehiculo', 'Auto']);
   const modelo = headerIndex(headers, ['Modelo']);
   const plan = headerIndex(headers, ['Tipo de Plan', 'Plan', 'Tipo']);
-  const cuota = headerIndex(headers, ['Valor Cuota #1', 'Cuota #1', 'Cuota', 'Valor']);
+  const normal = headerIndex(headers, ['Normal', 'Valor Cuota #1', 'Cuota #1', 'Cuota', 'Valor']);
+  const ultra = headerIndex(headers, ['Ultra']);
   const fabrica = headerIndex(headers, ['Cta. Fábrica', 'Cta Fabrica', 'Fábrica', 'Fabrica']);
   return values.slice(1).map(function(row) {
-    const cuota1 = numberValue(row[cuota >= 0 ? cuota : 3], 0);
+    const cuota1 = numberValue(row[normal >= 0 ? normal : 3], 0);
     const modeloNombre = String(row[modelo >= 0 ? modelo : 1] || '').trim();
     // Vehículo es la agrupación que controla el Parte Diario. Si la columna aún
     // no existe, se conserva compatibilidad usando la primera palabra del modelo.
@@ -116,7 +117,9 @@ function getModelos(ss) {
       modelo: modeloNombre,
       tipoPlan: String(row[plan >= 0 ? plan : 2] || '').trim(),
       valorCuota1: cuota1,
-      ctaFabrica: numberValue(row[fabrica >= 0 ? fabrica : cuota], cuota1)
+      normal: cuota1,
+      ultra: numberValue(row[ultra], 0),
+      ctaFabrica: numberValue(row[fabrica >= 0 ? fabrica : normal], cuota1)
     };
   }).filter(function(item) { return item.marca && item.modelo; });
 }
@@ -148,6 +151,7 @@ function fieldForHeader(header) {
   if (value === 'marca') return 'marca';
   if (value.indexOf('modelo') >= 0 && value.indexOf('usado') < 0) return 'modelo';
   if (value.indexOf('plan') >= 0 || value === 'tipo') return 'tipoPlan';
+  if (value === 'normal/ultra' || value === 'modalidad cuota') return 'modalidadCuota';
   if (value.indexOf('sena') >= 0 || value.indexOf('completa') >= 0) return 'senaOCompleta';
   if (value.indexOf('autoriz') >= 0) return 'autorizoDescuento';
   if (value.indexOf('fabrica') >= 0 || value.indexOf('cta') >= 0) return 'ctaFabrica';

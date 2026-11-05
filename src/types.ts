@@ -13,6 +13,8 @@ export interface ModeloPlanItem {
   modelo: string;
   tipoPlan: string; // ej: "100%", "80/20", "70/30"
   valorCuota1: number; // Valor sugerido
+  normal?: number;
+  ultra?: number;
   ctaFabrica?: number; // Cta. Fábrica oficial
   valorAuto?: number; // Valor del vehículo
 }
@@ -39,6 +41,7 @@ export interface UsadoPricingConfig {
 }
 
 export type SenaOCompleta = 'Completa' | 'Seña' | 'Descuento Aprobado';
+export type ModalidadCuota = 'Normal' | 'Ultra';
 export type EntregaUsado = 'Sí' | 'No';
 export type RespuestaSiNo = 'Sí' | 'No';
 
@@ -60,6 +63,7 @@ export interface VentaFormData {
   marca: MarcaAuto | '';
   modelo: string;
   tipoPlan: string;
+  modalidadCuota: ModalidadCuota;
   senaOCompleta: SenaOCompleta;
   autorizoDescuento?: string; // Obligatorio si senaOCompleta === 'Descuento Aprobado'
   valorCuota1: number | ''; // 100% automático, solo lectura

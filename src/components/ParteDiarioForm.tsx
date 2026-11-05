@@ -23,6 +23,7 @@ import {
   VentaFormData,
   ReferenceData,
   SenaOCompleta,
+  ModalidadCuota,
   EntregaUsado,
   RespuestaSiNo,
   AUTORIZADORES_DESCUENTO,
@@ -72,6 +73,9 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   );
   const [modelo, setModelo] = useState<string>(initialValues?.modelo || '');
   const [tipoPlan, setTipoPlan] = useState<string>(initialValues?.tipoPlan || '');
+  const [modalidadCuota, setModalidadCuota] = useState<ModalidadCuota | ''>(
+    initialValues?.modalidadCuota || ''
+  );
   
   // Valor Cuota #1: 100% automático, solo lectura
   const [valorCuota1, setValorCuota1] = useState<number | ''>(initialValues?.valorCuota1 || '');
@@ -195,18 +199,26 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [marca, vehiculo, referenceData.modelosYPrecios]);
 
-  // 3. Autocompletado dinámico de 'Valor Cuota #1' y 'Cta. Fábrica' (100% Automático de tabla, Solo Lectura)
+  const selectedCatalogItem = useMemo(() => referenceData.modelosYPrecios.find(
+    (item) =>
+      item.marca.toUpperCase() === marca.toUpperCase() &&
+      item.modelo.toLowerCase() === modelo.toLowerCase() &&
+      item.tipoPlan.toLowerCase() === tipoPlan.toLowerCase()
+  ), [marca, modelo, tipoPlan, referenceData.modelosYPrecios]);
+
+  const ultraDisponible = Number(selectedCatalogItem?.ultra) > 0;
+  const isUltra = modalidadCuota === 'Ultra';
+
+  // 3. El importe depende de la modalidad elegida en el catálogo.
   useEffect(() => {
-    if (marca && modelo && tipoPlan) {
-      const match = referenceData.modelosYPrecios.find(
-        (item) =>
-          item.marca.toUpperCase() === marca.toUpperCase() &&
-          item.modelo.toLowerCase() === modelo.toLowerCase() &&
-          item.tipoPlan.toLowerCase() === tipoPlan.toLowerCase()
-      );
+    if (selectedCatalogItem && modalidadCuota) {
+      const match = selectedCatalogItem;
       if (match) {
-        if (match.valorCuota1 > 0) {
-          setValorCuota1(match.valorCuota1);
+        const cuotaSeleccionada = modalidadCuota === 'Ultra'
+          ? Number(match.ultra)
+          : Number(match.normal ?? match.valorCuota1);
+        if (cuotaSeleccionada > 0) {
+          setValorCuota1(cuotaSeleccionada);
         } else {
           setValorCuota1('');
         }
@@ -223,7 +235,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       setValorCuota1('');
       setCtaFabrica('');
     }
-  }, [marca, modelo, tipoPlan, referenceData.modelosYPrecios]);
+  }, [selectedCatalogItem, modalidadCuota]);
 
   // 4. NUEVA LÓGICA CONDICIONAL: Monto Cobrado -> Seña o Completa
   // Escenario A: Monto Cobrado >= Valor Cuota #1
@@ -239,7 +251,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
 
   useEffect(() => {
     if (typeof montoCobrado === 'number' && typeof valorCuota1 === 'number' && valorCuota1 > 0) {
-      if (montoCobrado >= valorCuota1) {
+      if (isUltra || montoCobrado >= valorCuota1) {
         // Escenario A: Cobro completo o superior
         setSenaOCompleta('Completa');
         setAutorizoDescuento('');
@@ -251,7 +263,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
         }
       }
     }
-  }, [montoCobrado, valorCuota1, senaOCompleta]);
+  }, [montoCobrado, valorCuota1, senaOCompleta, isUltra]);
 
   // Manejo de cascada al cambiar Marca
   const handleMarcaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -260,6 +272,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setVehiculo('');
     setModelo('');
     setTipoPlan('');
+    setModalidadCuota('');
     setValorCuota1('');
     setCtaFabrica('');
     markTouched('marca');
@@ -269,6 +282,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setVehiculo(e.target.value);
     setModelo('');
     setTipoPlan('');
+    setModalidadCuota('');
     setValorCuota1('');
     setCtaFabrica('');
     markTouched('vehiculo');
@@ -278,6 +292,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     const selected = availableModelosYPlanes.find((option) => option.key === e.target.value);
     setModelo(selected?.modelo || '');
     setTipoPlan(selected?.tipoPlan || '');
+    setModalidadCuota('');
     markTouched('modelo');
     markTouched('tipoPlan');
   };
@@ -315,8 +330,10 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     if (!marca) errors.push('Marca');
     if (!modelo) errors.push('Modelo');
     if (!tipoPlan) errors.push('Tipo de Plan');
+    if (!modalidadCuota) errors.push('Modalidad de cuota');
     if (valorCuota1 === '' || valorCuota1 <= 0) errors.push('Valor Cuota #1 (requiere Marca, Modelo y Plan)');
     if (montoCobrado === '' || montoCobrado <= 0) errors.push('Monto Cobrado');
+    if (isUltra && isMontoCobradoMenorACuota) errors.push('Ultra requiere pago completo');
     if (!debitoAutomatico) errors.push('Débito automático');
 
     // Validación de Descuento Aprobado
@@ -350,10 +367,12 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     marca,
     modelo,
     tipoPlan,
+    modalidadCuota,
     valorCuota1,
     montoCobrado,
     debitoAutomatico,
     isMontoCobradoMenorACuota,
+    isUltra,
     senaOCompleta,
     autorizoDescuento,
     otroAutorizador,
@@ -410,6 +429,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       marca,
       modelo,
       tipoPlan,
+      modalidadCuota: modalidadCuota as ModalidadCuota,
       senaOCompleta,
       autorizoDescuento: finalAutorizador,
       valorCuota1: typeof valorCuota1 === 'number' ? valorCuota1 : 0,
@@ -444,7 +464,27 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">7. Modalidad de cuota *</label>
+            <select
+              id="select-modalidad-cuota"
+              value={modalidadCuota}
+              disabled={!selectedCatalogItem}
+              onChange={(e) => {
+                setModalidadCuota(e.target.value as ModalidadCuota | '');
+                setMontoCobrado('');
+                markTouched('modalidadCuota');
+              }}
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+              required
+            >
+              <option value="">{!selectedCatalogItem ? 'Primero elija Modelo y Plan' : '-- Elegir modalidad --'}</option>
+              <option value="Normal">Normal</option>
+              <option value="Ultra" disabled={!ultraDisponible}>Ultra{!ultraDisponible ? ' (no disponible)' : ''}</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">Define el valor oficial de la cuota #1.</p>
+          </div>
           {/* 1. Fecha */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
@@ -711,10 +751,10 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
             </p>
           </div>
 
-          {/* 7. Seña, Completa o Descuento Aprobado (Lógica Condicional de Montos) */}
+          {/* 10. Seña, Completa o Descuento Aprobado (Lógica Condicional de Montos) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-              <span>7. Seña o Completa *</span>
+              <span>10. Seña o Completa *</span>
               {!isMontoCobradoMenorACuota && typeof valorCuota1 === 'number' && valorCuota1 > 0 && typeof montoCobrado === 'number' && montoCobrado >= valorCuota1 ? (
                 <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                   Auto: Completa (Cobro &ge; Cuota)
@@ -727,7 +767,11 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
             </label>
 
             {/* Escenario A: Monto Cobrado >= Valor Cuota #1 -> Deshabilitado en "Completa" */}
-            {!isMontoCobradoMenorACuota ? (
+            {isUltra ? (
+              <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 py-2.5 px-3 text-xs font-bold text-violet-200">
+                Ingreso Ultra: solo pago completo
+              </div>
+            ) : !isMontoCobradoMenorACuota ? (
               <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 py-2.5 px-3 flex items-center justify-between text-xs font-bold text-emerald-300">
                 <div className="flex items-center gap-1.5">
                   <Check className="h-4 w-4 text-emerald-400" />
