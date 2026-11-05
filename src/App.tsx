@@ -46,6 +46,7 @@ export default function App() {
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formKey, setFormKey] = useState<number>(1); // used to cleanly reset form on new entry
   const [preservedCommercials, setPreservedCommercials] = useState<{
     equipoVenta?: string;
@@ -108,9 +109,16 @@ export default function App() {
   }, [config.webAppUrl]);
 
   const handleFormSubmit = async (formData: VentaFormData) => {
+    setSubmitError(null);
     setIsSubmitting(true);
     try {
       const result = await submitVentaRecord(formData);
+      if (!result.success || !result.syncedToRemote) {
+        setSalesHistory(getSalesHistory());
+        setSubmitError(result.message || 'No se pudo confirmar el registro en Google Sheets.');
+        return;
+      }
+
       // Apps Script puede completar la escritura antes de que el navegador reciba
       // la respuesta final. Releemos la fuente para reflejar el estado real.
       const remoteResult = result.syncedToRemote
@@ -140,6 +148,7 @@ export default function App() {
       setIsSuccessOpen(true);
     } catch (error) {
       console.error('Error al registrar venta:', error);
+      setSubmitError('No se pudo confirmar el registro en Google Sheets. La venta no fue marcada como exitosa.');
     } finally {
       setIsSubmitting(false);
     }
@@ -218,6 +227,16 @@ export default function App() {
             Sistema a prueba de errores humanos con validación en tiempo real y cálculo automático de cuota #1.
           </p>
         </div>
+
+        {submitError && (
+          <div role="alert" className="mb-5 flex items-start gap-3 rounded-2xl border border-rose-500/50 bg-rose-950/40 p-4 text-sm text-rose-100 shadow-md">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
+            <div>
+              <p className="font-bold text-rose-200">Venta no registrada en Google Sheets</p>
+              <p className="mt-1 text-xs leading-relaxed text-rose-100/90">{submitError}</p>
+            </div>
+          </div>
+        )}
 
         {/* Formulario Principal */}
         <ParteDiarioForm

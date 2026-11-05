@@ -357,10 +357,10 @@ export async function submitVentaRecord(
     saveStoredReferenceData(refData);
 
     return {
-      success: true,
+      success: false,
       numSuscripcion,
       syncedToRemote: false,
-      message: `Venta guardada en este dispositivo con clave #${numSuscripcion} (Modo Local / Demo).`,
+      message: `No se registró la venta #${numSuscripcion} en Google Sheets: la app no está conectada. Quedó pendiente sólo en este dispositivo.`,
     };
   }
 
@@ -480,10 +480,10 @@ export async function submitVentaRecord(
       saveSalesHistory(updatedHistory);
 
       return {
-        success: true,
+        success: false,
         numSuscripcion,
-        syncedToRemote: true,
-        message: json.message || 'Venta guardada exitosamente en Google Sheets.',
+        syncedToRemote: false,
+        message: `No se confirmó el registro de la venta #${numSuscripcion} en Google Sheets.${json.message ? ` Motivo: ${json.message}` : ' Quedó pendiente sólo en este dispositivo.'}`,
       };
     }
   } catch (err: unknown) {
@@ -509,10 +509,10 @@ export async function submitVentaRecord(
     saveSalesHistory(updatedHistory);
 
     return {
-      success: true,
+      success: false,
       numSuscripcion,
       syncedToRemote: false,
-      message: `Venta guardada en este dispositivo con clave #${numSuscripcion}. Se sincronizará automáticamente al conectarse con Google Sheets.`,
+      message: `No se registró la venta #${numSuscripcion} en Google Sheets. Quedó pendiente sólo en este dispositivo.${errorMsg ? ` Motivo: ${errorMsg}` : ''}`,
     };
   }
 }
