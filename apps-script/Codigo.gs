@@ -59,6 +59,12 @@ function ensureDestinationSheet(ss) {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
     return { sheet: sheet, headers: HEADERS.slice() };
   }
+  const tipoPlanColumn = headerIndex(headers, ['Tipo de Plan']);
+  if (tipoPlanColumn >= 0 && headerIndex(headers, ['Normal/Ultra']) < 0) {
+    sheet.insertColumnAfter(tipoPlanColumn + 1);
+    headers.splice(tipoPlanColumn + 1, 0, 'Normal/Ultra');
+    sheet.getRange(1, tipoPlanColumn + 2).setValue('Normal/Ultra');
+  }
   HEADERS.forEach(function(required) {
     if (headerIndex(headers, [required]) < 0) {
       headers.push(required);
