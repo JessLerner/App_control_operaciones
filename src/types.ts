@@ -61,6 +61,7 @@ export interface VentaFormData {
   cliente: string;
   numSuscripcion: string; // PRIMARY KEY
   marca: MarcaAuto | '';
+  vehiculo: string;
   modelo: string;
   tipoPlan: string;
   modalidadCuota: ModalidadCuota;

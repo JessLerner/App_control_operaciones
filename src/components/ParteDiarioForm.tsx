@@ -427,6 +427,9 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       cliente: cliente.trim(),
       numSuscripcion: numSuscripcion.trim(),
       marca,
+      vehiculo: selectedCatalogItem?.vehiculo?.trim()
+        || availableVehiculos.find((item) => item.key === vehiculo)?.label
+        || '',
       modelo,
       tipoPlan,
       modalidadCuota: modalidadCuota as ModalidadCuota,

@@ -11,7 +11,7 @@ const SHEETS = {
 };
 
 const HEADERS = [
-  'N° Suscripción', 'Fecha', 'Cliente', 'Marca', 'Modelo', 'Tipo de Plan', 'Normal/Ultra',
+  'N° Suscripción', 'Fecha', 'Cliente', 'Marca', 'Vehículo', 'Modelo', 'Tipo de Plan', 'Normal/Ultra',
   'Seña o Completa', 'Valor Cuota #1', 'Monto Cobrado', 'Autorizó Descuento',
   'Cta. Fábrica', 'Sobrepauta', '¿Entrega Usado?', 'Modelo Usado', 'Año Usado',
   'Valor Infoauto', 'Cotización Sugerida', 'Valor Toma', 'Equipo de Venta',
@@ -155,6 +155,7 @@ function fieldForHeader(header) {
   if (value.indexOf('fecha') >= 0) return 'fecha';
   if (value.indexOf('cliente') >= 0) return 'cliente';
   if (value === 'marca') return 'marca';
+  if (value === 'vehiculo' || value === 'auto') return 'vehiculo';
   if (value.indexOf('modelo') >= 0 && value.indexOf('usado') < 0) return 'modelo';
   if (value.indexOf('plan') >= 0 || value === 'tipo') return 'tipoPlan';
   if (value === 'normal/ultra' || value === 'modalidad cuota') return 'modalidadCuota';
