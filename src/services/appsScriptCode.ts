@@ -142,6 +142,15 @@ function getEquipos(ss) {
   }).filter(function(team) { return team.supervisor && key(team.supervisor) !== 'equipos' && team.vendedores.length; });
 }
 
+function getVehiculo(ss, marca, modelo, tipoPlan) {
+  const matches = getModelos(ss).filter(function(item) {
+    return key(item.marca) === key(marca) &&
+      key(item.modelo) === key(modelo) &&
+      key(item.tipoPlan) === key(tipoPlan);
+  });
+  return matches.length === 1 ? matches[0].vehiculo : '';
+}
+
 function getOrigenes(ss) {
   const sheet = ss.getSheetByName(SHEETS.ORIGEN);
   if (!sheet || sheet.getLastRow() < 2) return [];
@@ -296,6 +305,7 @@ function doPost(e) {
     const cuotaFabrica = numberValue(body.ctaFabrica, numberValue(body.valorCuota1, 0));
     const payload = Object.assign({}, body, {
       numSuscripcion: numSuscripcion, ctaFabrica: cuotaFabrica,
+      vehiculo: getVehiculo(ss, body.marca, body.modelo, body.tipoPlan) || body.vehiculo || '',
       sobrepauta: numberValue(body.montoCobrado, 0) - cuotaFabrica,
       cotizacionSugerida: body.entregaUsado === 'Sí' ? Math.round(infoauto * (1 - descuento)) : ''
     });
