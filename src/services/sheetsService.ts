@@ -1,5 +1,5 @@
-import { ReferenceData, VentaFormData, VentaRecord, SheetsConfig, ModeloPlanItem, UsadoPricingConfig } from '../types';
-import { INITIAL_REFERENCE_DATA, INITIAL_MODELOS_Y_PRECIOS } from '../data/initialReferenceData';
+import { ReferenceData, VentaFormData, VentaRecord, SheetsConfig, ModeloPlanItem, UsadoPricingConfig, ModalidadCuotaHistorica } from '../types';
+import { INITIAL_REFERENCE_DATA } from '../data/initialReferenceData';
 
 const STORAGE_KEYS = {
   CONFIG: 'pdv_sheets_config_v1',
@@ -83,18 +83,12 @@ export function getStoredReferenceData(): ReferenceData {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.modelosYPrecios && parsed.equiposDeVenta) {
-        // Garantizar que todos los modelos tengan su Cta. Fábrica calculada
+        // La cuota de fábrica sólo puede proceder de su propio campo del catálogo.
         parsed.modelosYPrecios = parsed.modelosYPrecios.map((item: ModeloPlanItem) => {
           if (item.ctaFabrica === undefined || item.ctaFabrica === null || item.ctaFabrica <= 0) {
-            const fallback = INITIAL_MODELOS_Y_PRECIOS.find(
-              (f) =>
-                f.marca.toUpperCase() === String(item.marca || '').toUpperCase() &&
-                f.modelo.toLowerCase() === String(item.modelo || '').toLowerCase() &&
-                f.tipoPlan.toLowerCase() === String(item.tipoPlan || '').toLowerCase()
-            );
             return {
               ...item,
-              ctaFabrica: fallback?.ctaFabrica || item.valorCuota1 || 0,
+              ctaFabrica: Number(item.cuota1) > 0 ? Number(item.cuota1) : 0,
             };
           }
           return item;
@@ -150,7 +144,10 @@ function mapRemoteSale(raw: Record<string, unknown>): VentaRecord | null {
   return {
     fecha: String(raw.fecha || ''), cliente: String(raw.cliente || ''), numSuscripcion,
     marca: String(raw.marca || '') as VentaRecord['marca'], vehiculo: String(raw.vehiculo || ''), modelo: String(raw.modelo || ''),
-    tipoPlan: String(raw.tipoPlan || ''), modalidadCuota: String(raw.modalidadCuota || 'Normal') === 'Ultra' ? 'Ultra' : 'Normal', senaOCompleta: (String(raw.senaOCompleta || 'Completa') as VentaRecord['senaOCompleta']),
+    tipoPlan: String(raw.tipoPlan || ''),
+    // No se normalizan registros existentes: "Normal", "Ultra" y vacío siguen visibles.
+    modalidadCuota: String(raw.modalidadCuota || '') as ModalidadCuotaHistorica,
+    senaOCompleta: (String(raw.senaOCompleta || 'Completa') as VentaRecord['senaOCompleta']),
     autorizoDescuento: String(raw.autorizoDescuento || ''), valorCuota1: numberValue(raw.valorCuota1),
     valorAuto: numberValue(raw.valorAuto), debitoAutomatico: String(raw.debitoAutomatico || '') === 'Sí' ? 'Sí' : String(raw.debitoAutomatico || '') === 'No' ? 'No' : undefined,
     ctaFabrica: numberValue(raw.ctaFabrica), sobrepauta: numberValue(raw.sobrepauta),
@@ -230,21 +227,19 @@ export async function fetchRemoteReferenceData(url: string): Promise<{ success: 
     if (json.status === 'success' && json.data) {
       const rawModelos: ModeloPlanItem[] = json.data.modelosYPrecios || [];
       const enrichedModelos: ModeloPlanItem[] = rawModelos.map((item) => {
-        const itemCuota = Number(item.valorCuota1) || 0;
-        let fab = Number(item.ctaFabrica);
-        if (!fab || fab <= 0) {
-          const fallback = INITIAL_MODELOS_Y_PRECIOS.find(
-            (f) =>
-              f.marca.toUpperCase() === String(item.marca || '').toUpperCase() &&
-              f.modelo.toLowerCase() === String(item.modelo || '').toLowerCase() &&
-              f.tipoPlan.toLowerCase() === String(item.tipoPlan || '').toLowerCase()
-          );
-          fab = fallback?.ctaFabrica || itemCuota;
-        }
+        const normal1 = Number(item.normal1);
+        const normal3 = Number(item.normal3);
+        const ultra = Number(item.ultra);
+        const cuota1 = Number(item.cuota1 ?? item.ctaFabrica);
         return {
           ...item,
-          valorCuota1: itemCuota,
-          ctaFabrica: fab,
+          normal1: Number.isFinite(normal1) && normal1 > 0 ? normal1 : undefined,
+          normal3: Number.isFinite(normal3) && normal3 > 0 ? normal3 : undefined,
+          ultra: Number.isFinite(ultra) && ultra > 0 ? ultra : undefined,
+          cuota1: Number.isFinite(cuota1) && cuota1 > 0 ? cuota1 : undefined,
+          ctaFabrica: Number.isFinite(cuota1) && cuota1 > 0 ? cuota1 : undefined,
+          // No se usa como respaldo comercial; sólo conserva compatibilidad visual.
+          valorCuota1: 0,
         };
       });
 
@@ -369,10 +364,7 @@ export async function submitVentaRecord(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    const ctaFabricaNum =
-      typeof record.ctaFabrica === 'number' && record.ctaFabrica > 0
-        ? record.ctaFabrica
-        : Number(record.valorCuota1) || 0;
+    const ctaFabricaNum = Number(record.cuota1 ?? record.ctaFabrica) || 0;
 
     const montoCobradoNum = typeof record.montoCobrado === 'number' ? record.montoCobrado : 0;
     const sobrepautaNum =
@@ -397,6 +389,7 @@ export async function submitVentaRecord(
       senaOCompleta: record.senaOCompleta,
       autorizoDescuento: record.senaOCompleta === 'Descuento Aprobado' ? (record.autorizoDescuento || '') : '',
       valorCuota1: Number(record.valorCuota1) || 0,
+      cuota1: Number(record.cuota1 ?? record.ctaFabrica) || 0,
       valorAuto: Number(record.valorAuto) || 0,
       ctaFabrica: ctaFabricaNum,
       cta_fabrica: ctaFabricaNum,
@@ -559,7 +552,10 @@ export async function syncPendingSales(): Promise<{ total: number; synced: numbe
 
   let syncedCount = 0;
   for (const item of pending) {
-    const res = await submitVentaRecord(item, true);
+    // Sólo las nuevas modalidades tienen contrato de reintento con el backend actualizado.
+    // Las filas históricas no se reclasifican ni se reenvían con otro valor.
+    if (item.modalidadCuota !== 'normal_1' && item.modalidadCuota !== 'normal_3' && item.modalidadCuota !== 'ultra') continue;
+    const res = await submitVentaRecord(item as VentaFormData, true);
     if (res.syncedToRemote) {
       syncedCount++;
     }

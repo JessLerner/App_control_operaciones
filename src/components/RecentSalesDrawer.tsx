@@ -110,6 +110,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       'Marca',
       'Modelo',
       'Tipo de Plan',
+      'Modalidad de cuota',
       'Seña o Completa',
       'Autorizó Descuento',
       'Valor Cuota #1',
@@ -137,6 +138,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
       s.marca,
       s.modelo,
       s.tipoPlan,
+      s.modalidadCuota,
       s.senaOCompleta,
       s.autorizoDescuento || '',
       s.valorCuota1 || 0,
@@ -302,7 +304,7 @@ export const RecentSalesDrawer: React.FC<RecentSalesDrawerProps> = ({
                   <span className="text-emerald-300 font-medium">
                     {sale.marca} {sale.modelo}
                   </span>{' '}
-                  &bull; {sale.tipoPlan} ({sale.senaOCompleta}
+                  &bull; {sale.tipoPlan} ({sale.modalidadCuota || 'Sin modalidad'} · {sale.senaOCompleta}
                   {sale.autorizoDescuento ? ` - Aut: ${sale.autorizoDescuento}` : ''})
                 </div>
 

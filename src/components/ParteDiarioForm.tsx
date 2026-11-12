@@ -73,9 +73,14 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   );
   const [modelo, setModelo] = useState<string>(initialValues?.modelo || '');
   const [tipoPlan, setTipoPlan] = useState<string>(initialValues?.tipoPlan || '');
-  const [modalidadCuota, setModalidadCuota] = useState<ModalidadCuota | ''>(
-    initialValues?.modalidadCuota || ''
-  );
+  const [modalidadVisible, setModalidadVisible] = useState<'Normal' | 'Ultra' | ''>('');
+  const [cantidadPagos, setCantidadPagos] = useState<'1' | '3' | ''>('');
+  const modalidadCuota = useMemo<ModalidadCuota | ''>(() => {
+    if (modalidadVisible === 'Ultra') return 'ultra';
+    if (modalidadVisible === 'Normal' && cantidadPagos === '1') return 'normal_1';
+    if (modalidadVisible === 'Normal' && cantidadPagos === '3') return 'normal_3';
+    return '';
+  }, [modalidadVisible, cantidadPagos]);
   
   // Valor Cuota #1: 100% automático, solo lectura
   const [valorCuota1, setValorCuota1] = useState<number | ''>(initialValues?.valorCuota1 || '');
@@ -207,16 +212,18 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
   ), [marca, modelo, tipoPlan, referenceData.modelosYPrecios]);
 
   const ultraDisponible = Number(selectedCatalogItem?.ultra) > 0;
-  const isUltra = modalidadCuota === 'Ultra';
+  const isUltra = modalidadCuota === 'ultra';
 
   // 3. El importe depende de la modalidad elegida en el catálogo.
   useEffect(() => {
     if (selectedCatalogItem && modalidadCuota) {
       const match = selectedCatalogItem;
       if (match) {
-        const cuotaSeleccionada = modalidadCuota === 'Ultra'
+        const cuotaSeleccionada = modalidadCuota === 'ultra'
           ? Number(match.ultra)
-          : Number(match.normal ?? match.valorCuota1);
+          : modalidadCuota === 'normal_1'
+          ? Number(match.normal1)
+          : Number(match.normal3);
         if (cuotaSeleccionada > 0) {
           setValorCuota1(cuotaSeleccionada);
         } else {
@@ -225,7 +232,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
         const factoryCuota =
           match.ctaFabrica !== undefined && match.ctaFabrica > 0
             ? match.ctaFabrica
-            : match.valorCuota1;
+            : match.cuota1;
         setCtaFabrica(factoryCuota || '');
       } else {
         setValorCuota1('');
@@ -272,9 +279,13 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setVehiculo('');
     setModelo('');
     setTipoPlan('');
-    setModalidadCuota('');
+    setModalidadVisible('');
+    setCantidadPagos('');
     setValorCuota1('');
     setCtaFabrica('');
+    setMontoCobrado('');
+    setSenaOCompleta('Completa');
+    setAutorizoDescuento('');
     markTouched('marca');
   };
 
@@ -282,9 +293,13 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     setVehiculo(e.target.value);
     setModelo('');
     setTipoPlan('');
-    setModalidadCuota('');
+    setModalidadVisible('');
+    setCantidadPagos('');
     setValorCuota1('');
     setCtaFabrica('');
+    setMontoCobrado('');
+    setSenaOCompleta('Completa');
+    setAutorizoDescuento('');
     markTouched('vehiculo');
   };
 
@@ -292,7 +307,11 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     const selected = availableModelosYPlanes.find((option) => option.key === e.target.value);
     setModelo(selected?.modelo || '');
     setTipoPlan(selected?.tipoPlan || '');
-    setModalidadCuota('');
+    setModalidadVisible('');
+    setCantidadPagos('');
+    setMontoCobrado('');
+    setSenaOCompleta('Completa');
+    setAutorizoDescuento('');
     markTouched('modelo');
     markTouched('tipoPlan');
   };
@@ -330,7 +349,8 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     if (!marca) errors.push('Marca');
     if (!modelo) errors.push('Modelo');
     if (!tipoPlan) errors.push('Tipo de Plan');
-    if (!modalidadCuota) errors.push('Modalidad de cuota');
+    if (!modalidadVisible) errors.push('Modalidad de cuota');
+    if (modalidadVisible === 'Normal' && !cantidadPagos) errors.push('Cantidad de pagos');
     if (valorCuota1 === '' || valorCuota1 <= 0) errors.push('Valor Cuota #1 (requiere Marca, Modelo y Plan)');
     if (montoCobrado === '' || montoCobrado <= 0) errors.push('Monto Cobrado');
     if (isUltra && isMontoCobradoMenorACuota) errors.push('Ultra requiere pago completo');
@@ -367,7 +387,8 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     marca,
     modelo,
     tipoPlan,
-    modalidadCuota,
+    modalidadVisible,
+    cantidadPagos,
     valorCuota1,
     montoCobrado,
     debitoAutomatico,
@@ -411,11 +432,11 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
           item.tipoPlan.toLowerCase() === tipoPlan.toLowerCase()
       );
       if (match) {
-        resolvedCtaFabrica = Number(match.ctaFabrica) || Number(match.valorCuota1) || 0;
+        resolvedCtaFabrica = Number(match.cuota1 ?? match.ctaFabrica) || 0;
       }
     }
     if (!resolvedCtaFabrica) {
-      resolvedCtaFabrica = typeof valorCuota1 === 'number' ? valorCuota1 : 0;
+      resolvedCtaFabrica = 0;
     }
 
     // Sobrepauta = Monto Cobrado - Cta. Fábrica
@@ -436,6 +457,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
       senaOCompleta,
       autorizoDescuento: finalAutorizador,
       valorCuota1: typeof valorCuota1 === 'number' ? valorCuota1 : 0,
+      cuota1: resolvedCtaFabrica,
       ctaFabrica: resolvedCtaFabrica,
       sobrepauta: resolvedSobrepauta,
       montoCobrado: finalMontoCobrado,
@@ -662,11 +684,16 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">7. Modalidad de cuota *</label>
             <select
               id="select-modalidad-cuota"
-              value={modalidadCuota}
+              value={modalidadVisible}
               disabled={!selectedCatalogItem}
               onChange={(e) => {
-                setModalidadCuota(e.target.value as ModalidadCuota | '');
+                const value = e.target.value as 'Normal' | 'Ultra' | '';
+                setModalidadVisible(value);
+                setCantidadPagos('');
                 setMontoCobrado('');
+                setSenaOCompleta('Completa');
+                setAutorizoDescuento('');
+                setOtroAutorizador('');
                 markTouched('modalidadCuota');
               }}
               className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -678,6 +705,18 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
             </select>
             <p className="mt-1 text-[11px] text-slate-400">Define el valor oficial de la cuota #1.</p>
           </div>
+          {modalidadVisible === 'Normal' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Cantidad de pagos *</label>
+              <select id="select-cantidad-pagos" value={cantidadPagos} onChange={(e) => {
+                setCantidadPagos(e.target.value as '1' | '3' | '');
+                setMontoCobrado(''); setSenaOCompleta('Completa'); setAutorizoDescuento(''); setOtroAutorizador(''); markTouched('cantidadPagos');
+              }} className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-white" required>
+                <option value="">-- Elegir cantidad --</option><option value="1">1 pago</option><option value="3">3 pagos</option>
+              </select>
+              <p className="mt-1 text-[11px] text-slate-400">Seleccioná la alternativa comercial Normal.</p>
+            </div>
+          )}
           {/* 8. Valor Cuota #1 (100% Automático de catálogo - Solo Lectura) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
