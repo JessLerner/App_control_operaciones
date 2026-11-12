@@ -29,7 +29,6 @@ import {
   AUTORIZADORES_DESCUENTO,
   ModeloPlanItem,
 } from '../types';
-import { MARCAS_DISPONIBLES } from '../data/initialReferenceData';
 import {
   formatNumberWithThousands,
   parseCurrencyInput,
@@ -159,6 +158,14 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
     if (!numSuscripcion || !numSuscripcion.trim()) return false;
     return checkSubscriptionExists(numSuscripcion.trim());
   }, [numSuscripcion]);
+
+  // Las marcas salen del catálogo remoto para que una incorporación nueva
+  // (por ejemplo, MG) quede disponible sin actualizar el código.
+  const availableMarcas = useMemo(() => Array.from(new Set(
+    referenceData.modelosYPrecios
+      .map((item) => item.marca.trim().toUpperCase())
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b)), [referenceData.modelosYPrecios]);
 
   // El primer selector muestra sólo el vehículo base. Las versiones y los planes
   // se eligen juntos después, sin alterar los valores originales del catálogo.
@@ -596,7 +603,7 @@ export const ParteDiarioForm: React.FC<ParteDiarioFormProps> = ({
               required
             >
               <option value="">-- Seleccionar Marca --</option>
-              {MARCAS_DISPONIBLES.map((m) => (
+              {availableMarcas.map((m) => (
                 <option key={m} value={m} className="bg-slate-900 text-white">
                   {m}
                 </option>

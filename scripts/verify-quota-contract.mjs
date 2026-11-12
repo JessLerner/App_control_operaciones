@@ -14,6 +14,8 @@ assert.match(appScript, /setFormula\(/);
 assert.match(appScript, /Monto Restante seña/);
 assert.match(appScript, /columnLetter\(chargedColumn\).*columnLetter\(referenceColumn\)/s);
 assert.match(form, /select-cantidad-pagos/);
+assert.match(form, /const availableMarcas = useMemo/);
+assert.doesNotMatch(form, /MARCAS_DISPONIBLES/);
 assert.match(form, /normal_1/);
 assert.match(form, /normal_3/);
 assert.match(form, /modalidadCuota === 'ultra'/);
